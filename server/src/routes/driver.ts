@@ -6,6 +6,7 @@ import {
   setOnlineStatus,
   listEligibleRequests,
   getCurrentPool,
+  listDriverHistory,
   DriverVehicleMissingError,
   ActivePoolBlocksOfflineError,
 } from '../services/driverService';
@@ -130,5 +131,70 @@ driverRouter.get(
     }
   }
 );
+
+driverRouter.get(
+  '/history',
+  authenticate,
+  requireRole('DRIVER'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: { code: 'UNAUTHENTICATED' } });
+        return;
+      }
+
+      let limit = 20;
+      if (req.query.limit) {
+        const parsedLimit = parseInt(req.query.limit as string, 10);
+        if (!isNaN(parsedLimit) && parsedLimit > 0) {
+          limit = Math.min(parsedLimit, 100);
+        }
+      }
+
+      let parsed: { c: string; i: string } | null = null;
+      if (req.query.cursor) {
+        try {
+          parsed = JSON.parse(Buffer.from(req.query.cursor as string, 'base64').toString('utf8'));
+          if (!parsed || typeof parsed.c !== 'string' || typeof parsed.i !== 'string') {
+            throw new Error('shape');
+          }
+        } catch {
+          res.status(400).json({ error: { code: 'VALIDATION_ERROR', detail: 'Invalid cursor' } });
+          return;
+        }
+      }
+
+      try {
+        const { rows, nextCursor } = await listDriverHistory({
+          driverId: req.user.userId,
+          limit,
+          cursorCreatedAt: parsed?.c,
+          cursorPoolId: parsed?.i,
+        });
+
+        const encodedCursor = nextCursor
+          ? Buffer.from(JSON.stringify({ c: nextCursor.createdAt, i: nextCursor.poolId })).toString('base64')
+          : null;
+
+        res.status(200).json({
+          data: rows,
+          pagination: {
+            nextCursor: encodedCursor,
+            hasMore: nextCursor !== null,
+          },
+        });
+      } catch (err) {
+        if (err instanceof DriverVehicleMissingError) {
+          res.status(404).json({ error: { code: 'VEHICLE_NOT_FOUND' } });
+          return;
+        }
+        throw err;
+      }
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 
 
