@@ -381,3 +381,109 @@ export async function advancePoolStatus(input: {
   }
 }
 
+export async function cancelActivePool(input: {
+  driverId: string;
+  poolId: string;
+}): Promise<{
+  poolId: string;
+  cancelledAt: string;
+  affectedRequests: Array<{ requestId: string; passengerName: string; newStatus: 'WAITING' }>;
+}> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // LEVEL 1 LOCK: vehicles
+    const vehicleResult = await client.query(
+      `SELECT id FROM vehicles WHERE driver_id = $1 AND is_active = TRUE FOR UPDATE`,
+      [input.driverId]
+    );
+    if (vehicleResult.rowCount === 0) throw new DriverVehicleMissingError();
+    const vehicleId = vehicleResult.rows[0].id;
+
+    // LEVEL 2 LOCK: ride_pools (ownership-scoped)
+    const poolResult = await client.query(
+      `SELECT id, status FROM ride_pools
+       WHERE id = $1 AND vehicle_id = $2
+       FOR UPDATE`,
+      [input.poolId, vehicleId]
+    );
+    if (poolResult.rowCount === 0) throw new PoolNotFoundError();
+    if (!['FORMING', 'ARRIVED'].includes(poolResult.rows[0].status)) {
+      throw new InvalidPoolTransitionError();
+    }
+
+    // LEVEL 3 LOCK: ride_requests (all active members, UUID ASC)
+    await client.query(
+      `SELECT id FROM ride_requests
+       WHERE id IN (
+         SELECT ride_request_id FROM pool_members
+         WHERE pool_id = $1 AND status = 'ACTIVE'
+       )
+       ORDER BY id ASC
+       FOR UPDATE`,
+      [input.poolId]
+    );
+
+    // LEVEL 2 MUTATION: ride_pools
+    const cancelledPoolResult = await client.query(
+      `UPDATE ride_pools SET status = 'CANCELLED', cancelled_at = NOW()
+       WHERE id = $1
+       RETURNING cancelled_at`,
+      [input.poolId]
+    );
+    const cancelledAt = cancelledPoolResult.rows[0].cancelled_at instanceof Date
+      ? cancelledPoolResult.rows[0].cancelled_at.toISOString()
+      : String(cancelledPoolResult.rows[0].cancelled_at);
+
+    // LEVEL 4 + LEVEL 3 + LEVEL 5 via CTE chain.
+    const affectedResult = await client.query(
+      `WITH cancelled_members AS (
+         UPDATE pool_members
+         SET status = 'CANCELLED', cancelled_at = NOW()
+         WHERE pool_id = $1 AND status = 'ACTIVE'
+         RETURNING id, ride_request_id
+       ),
+       reverted_requests AS (
+         UPDATE ride_requests
+         SET status = 'WAITING', cancelled_at = NULL
+         WHERE id IN (SELECT ride_request_id FROM cancelled_members)
+         RETURNING id
+       ),
+       audit AS (
+         INSERT INTO ride_events (actor_user_id, ride_request_id, pool_id, pool_member_id,
+                                  event_type, from_status, to_status)
+         SELECT $2, cm.ride_request_id, $1, cm.id,
+                'DRIVER_CANCELLED_POOL', 'MATCHED', 'WAITING'
+         FROM cancelled_members cm
+         RETURNING ride_request_id
+       )
+       SELECT cm.ride_request_id, u.full_name AS passenger_name
+       FROM cancelled_members cm
+       JOIN ride_requests r ON r.id = cm.ride_request_id
+       JOIN users u ON u.id = r.passenger_id`,
+      [input.poolId, input.driverId]
+    );
+
+    await client.query('COMMIT');
+
+    const affectedRequests = affectedResult.rows.map((r) => ({
+      requestId: r.ride_request_id as string,
+      passengerName: r.passenger_name as string,
+      newStatus: 'WAITING' as const,
+    }));
+
+    return {
+      poolId: input.poolId,
+      cancelledAt,
+      affectedRequests,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+
