@@ -4,12 +4,13 @@ import { pool } from './config/db';
 import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './routes/auth';
 import { ridesRouter } from './routes/rides';
+import { driverRouter } from './routes/driver';
 
 export const app = express();
 
 app.use((req: Request, res: Response, next: NextFunction) => {
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Idempotency-Key');
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
@@ -23,6 +24,7 @@ app.use(pinoHttp());
 
 app.use('/api/auth', authRouter);
 app.use('/api/rides', ridesRouter);
+app.use('/api/driver', driverRouter);
 
 app.get('/health', async (_req: Request, res: Response) => {
   try {
