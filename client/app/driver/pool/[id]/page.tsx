@@ -2,8 +2,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { apiFetch, clearToken, uuid } from '@/lib/api';
+import { apiFetch, uuid, clearToken, isSessionExpired } from '@/lib/api';
+import { usePolling } from '@/lib/usePolling';
 import { ZONE_LABELS, Zone } from '@/lib/zones';
+import { StatusBadge } from '@/components/StatusBadge';
+import { LoadingState } from '@/components/LoadingState';
+import { ErrorState } from '@/components/ErrorState';
 
 interface Passenger {
   requestId: string;
@@ -13,7 +17,6 @@ interface Passenger {
   seatCount: number;
   individualFarePoysha: number;
 }
-
 interface Pool {
   id: string;
   status: 'FORMING' | 'ARRIVED' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED';
@@ -25,265 +28,148 @@ interface Pool {
   createdAt: string;
   passengers: Passenger[];
 }
-
 interface VehicleInfo {
   id: string;
   name: string;
   capacity: number;
   isOnline: boolean;
 }
-
-interface CurrentResponse {
-  vehicle: VehicleInfo;
-  pool: Pool | null;
-}
+interface CurrentResponse { vehicle: VehicleInfo; pool: Pool | null; }
 
 export default function DriverPoolDetailPage() {
-  const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [pool, setPool] = useState<Pool | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const params = useParams<{ id: string }>();
+  const poolId = params.id;
+  const [inlineError, setInlineError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  // Terminal state flag — once the pool has transitioned to COMPLETED or CANCELLED,
+  // we are navigating away. Disable fast polling and suppress the "No active pool" flash.
+  const [finished, setFinished] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await apiFetch<CurrentResponse>('/api/driver/pools/current');
-      setPool(res.pool);
-    } catch (err) {
-      if (err instanceof Error && (err.message === 'UNAUTHENTICATED' || err.message === 'TOKEN_EXPIRED')) {
-        clearToken();
-        router.push('/login');
-        return;
-      }
-      setError(err instanceof Error ? err.message : 'Failed to load pool');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data, error, loading, refresh } = usePolling<CurrentResponse>(
+    () => apiFetch<CurrentResponse>('/api/driver/pools/current'),
+    finished ? 60_000 : 3_000
+  );
 
   useEffect(() => {
-    load();
-  }, [params.id]);
+    if (isSessionExpired(error)) {
+      clearToken();
+      router.push('/login');
+    }
+  }, [error, router]);
 
-  async function handleAdvanceStatus(targetStatus: 'ARRIVED' | 'IN_TRANSIT' | 'COMPLETED') {
-    if (!pool) return;
+  async function onAdvance(target: 'ARRIVED' | 'IN_TRANSIT' | 'COMPLETED') {
+    setInlineError(null);
     setActionLoading(true);
-    setError(null);
     try {
-      await apiFetch<{ poolId: string; status: string }>(`/api/driver/pools/${pool.id}/status`, {
+      await apiFetch(`/api/driver/pools/${poolId}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: targetStatus }),
+        body: JSON.stringify({ status: target }),
       });
-
-      if (targetStatus === 'COMPLETED') {
+      if (target === 'COMPLETED') {
+        setFinished(true);
         router.push('/driver/history');
         return;
       }
-
-      await load();
+      await refresh();
     } catch (err) {
+      if (isSessionExpired(err)) { clearToken(); router.push('/login'); return; }
       if (err instanceof Error) {
-        if (err.message === 'UNAUTHENTICATED' || err.message === 'TOKEN_EXPIRED') {
-          clearToken();
-          router.push('/login');
-          return;
-        }
-        if (err.message === 'INVALID_TRANSITION') {
-          setError('This action is not available in the current state.');
-        } else if (err.message === 'POOL_NOT_FOUND') {
-          setError('Pool not found.');
-        } else {
-          setError(err.message);
-        }
+        if (err.message === 'INVALID_TRANSITION') setInlineError('This action is not available in the current state.');
+        else if (err.message === 'POOL_NOT_FOUND') setInlineError('Pool not found.');
+        else setInlineError(err.message);
       }
     } finally {
       setActionLoading(false);
     }
   }
 
-  async function handleCancelPool() {
-    if (!pool) return;
+  async function onCancelPool() {
+    setInlineError(null);
     setActionLoading(true);
-    setError(null);
     try {
-      await apiFetch(`/api/driver/pools/${pool.id}/cancel`, {
+      await apiFetch(`/api/driver/pools/${poolId}/cancel`, {
         method: 'POST',
         idempotencyKey: uuid(),
       });
+      setFinished(true);
       router.push('/driver/dashboard');
     } catch (err) {
+      if (isSessionExpired(err)) { clearToken(); router.push('/login'); return; }
       if (err instanceof Error) {
-        if (err.message === 'UNAUTHENTICATED' || err.message === 'TOKEN_EXPIRED') {
-          clearToken();
-          router.push('/login');
-          return;
-        }
-        if (err.message === 'INVALID_TRANSITION') {
-          setError('This action is not available in the current state.');
-        } else if (err.message === 'POOL_NOT_FOUND') {
-          setError('Pool not found.');
-        } else {
-          setError(err.message);
-        }
+        if (err.message === 'INVALID_TRANSITION') setInlineError('Cannot cancel pool once trip has started.');
+        else if (err.message === 'POOL_NOT_FOUND') setInlineError('Pool not found.');
+        else setInlineError(err.message);
       }
     } finally {
       setActionLoading(false);
     }
   }
 
-  const statusBadgeColor: Record<string, string> = {
-    FORMING: 'bg-primary text-white',
-    ARRIVED: 'bg-amber-600 text-white',
-    IN_TRANSIT: 'bg-blue-600 text-white',
-    COMPLETED: 'bg-success text-white',
-    CANCELLED: 'bg-zinc-500 text-white',
-  };
+  // DATA-FIRST RENDERING
+  if (data) {
+    const pool = data.pool;
+    // If the pool was already completed/cancelled and we're navigating, don't show the
+    // "No active pool" error — show a brief "Finishing…" placeholder instead.
+    if (!pool || pool.id !== poolId) {
+      if (finished) return <LoadingState label="Finishing…" />;
+      return <ErrorState message="No active pool with that ID." backHref="/driver/dashboard" backLabel="Back to dashboard" />;
+    }
 
-  return (
-    <div className="min-h-screen bg-surface text-ink p-8">
-      <div className="max-w-3xl mx-auto space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-serif font-bold tracking-tight">Active Pool Details</h1>
-            <p className="text-sm text-ink-muted">Trip lifecycle control</p>
-          </div>
-          <Link
-            href="/driver/dashboard"
-            className="text-sm font-medium text-primary hover:underline"
-          >
-            &larr; Back to Dashboard
-          </Link>
-        </div>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-            {error}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="bg-card rounded-lg p-6 shadow text-center text-ink-muted">
-            Loading pool details...
-          </div>
-        ) : pool === null || pool.id !== params.id ? (
-          <div className="bg-card rounded-lg p-6 shadow text-center space-y-4">
-            <p className="text-ink-muted">No active pool with that ID.</p>
-            <Link
-              href="/driver/dashboard"
-              className="inline-block bg-primary text-white rounded px-4 py-2 text-sm font-medium"
-            >
-              Back to Dashboard
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="bg-card rounded-lg p-6 shadow space-y-4">
-              <div className="flex flex-wrap justify-between items-center gap-2 border-b pb-4">
-                <div className="flex items-center gap-3">
-                  <span className={`rounded px-2.5 py-1 text-sm font-medium ${statusBadgeColor[pool.status] || 'bg-zinc-500 text-white'}`}>
-                    {pool.status}
-                  </span>
-                  <span className="text-sm text-ink-muted">
-                    {pool.occupiedSeats} / {pool.totalCapacity} seats occupied
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <h2 className="text-xl font-semibold">
-                  {ZONE_LABELS[pool.initialPickupZone as Zone] || pool.initialPickupZone} &rarr;{' '}
-                  {ZONE_LABELS[pool.farthestDropoffZone as Zone] || pool.farthestDropoffZone}
-                </h2>
-                <p className="text-sm text-ink-muted mt-1">
-                  Corridor Distance: {pool.pickupToFarthestKm} km
-                </p>
-              </div>
-
-              <div className="space-y-3 pt-2">
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-ink-muted">
-                  Passengers Manifest ({pool.passengers.length})
-                </h3>
-                <div className="divide-y divide-surface-alt border border-surface-alt rounded">
-                  {pool.passengers.map((p) => (
-                    <div
-                      key={p.requestId}
-                      className="p-3 flex justify-between items-center text-sm"
-                    >
-                      <div>
-                        <span className="font-medium text-ink">{p.passengerName}</span>
-                        <span className="text-xs text-ink-muted ml-2">
-                          ({p.seatCount} {p.seatCount === 1 ? 'seat' : 'seats'})
-                        </span>
-                        <div className="text-xs text-ink-muted">
-                          {ZONE_LABELS[p.pickupZone as Zone] || p.pickupZone} &rarr;{' '}
-                          {ZONE_LABELS[p.dropoffZone as Zone] || p.dropoffZone}
-                        </div>
-                      </div>
-                      <div className="font-medium text-ink">
-                        ৳{(p.individualFarePoysha / 100).toFixed(2)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Lifecycle Actions */}
-              <div className="pt-4 border-t flex flex-wrap items-center gap-4">
-                {pool.status === 'FORMING' && (
-                  <>
-                    <button
-                      onClick={() => handleAdvanceStatus('ARRIVED')}
-                      disabled={actionLoading}
-                      className="bg-primary text-white rounded px-4 py-2 text-sm font-medium hover:bg-primary-dark disabled:opacity-50"
-                    >
-                      {actionLoading ? 'Updating...' : 'Mark Arrived'}
-                    </button>
-                    <button
-                      onClick={handleCancelPool}
-                      disabled={actionLoading}
-                      className="bg-red-600 text-white rounded px-4 py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-50"
-                    >
-                      {actionLoading ? 'Cancelling...' : 'Cancel Pool'}
-                    </button>
-                  </>
-                )}
-
-                {pool.status === 'ARRIVED' && (
-                  <>
-                    <button
-                      onClick={() => handleAdvanceStatus('IN_TRANSIT')}
-                      disabled={actionLoading}
-                      className="bg-primary text-white rounded px-4 py-2 text-sm font-medium hover:bg-primary-dark disabled:opacity-50"
-                    >
-                      {actionLoading ? 'Updating...' : 'Start Trip'}
-                    </button>
-                    <button
-                      onClick={handleCancelPool}
-                      disabled={actionLoading}
-                      className="bg-red-600 text-white rounded px-4 py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-50"
-                    >
-                      {actionLoading ? 'Cancelling...' : 'Cancel Pool'}
-                    </button>
-                  </>
-                )}
-
-                {pool.status === 'IN_TRANSIT' && (
-                  <button
-                    onClick={() => handleAdvanceStatus('COMPLETED')}
-                    disabled={actionLoading}
-                    className="bg-primary text-white rounded px-4 py-2 text-sm font-medium hover:bg-primary-dark disabled:opacity-50"
-                  >
-                    {actionLoading ? 'Updating...' : 'Complete Trip'}
-                  </button>
-                )}
-              </div>
+    return (
+      <div className="min-h-screen bg-surface text-ink p-8">
+        <div className="max-w-lg mx-auto space-y-6">
+          <Link href="/driver/dashboard" className="text-primary underline">Back to dashboard</Link>
+          <div className="bg-card rounded-lg p-6 shadow space-y-4">
+            <div className="flex items-center justify-between">
+              <h1 className="text-2xl font-serif">Pool detail</h1>
+              <StatusBadge status={pool.status} />
+            </div>
+            <div>
+              <p className="text-ink-muted text-sm">Route</p>
+              <p className="text-lg">{ZONE_LABELS[pool.initialPickupZone as Zone]} → {ZONE_LABELS[pool.farthestDropoffZone as Zone]}</p>
+            </div>
+            <div>
+              <p className="text-ink-muted text-sm">Occupancy</p>
+              <p className="text-lg">{pool.occupiedSeats}/{pool.totalCapacity} seats</p>
+            </div>
+            <div>
+              <p className="text-ink-muted text-sm">Passengers</p>
+              <ul className="space-y-2 mt-2">
+                {pool.passengers.map((p) => (
+                  <li key={p.requestId} className="bg-surface-alt rounded p-3">
+                    <p>{p.passengerName}</p>
+                    <p className="text-sm text-ink-muted">{ZONE_LABELS[p.pickupZone as Zone]} → {ZONE_LABELS[p.dropoffZone as Zone]}</p>
+                    <p className="text-sm">৳{(p.individualFarePoysha / 100).toFixed(2)} · {p.seatCount} seat(s)</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {inlineError && <p className="text-red-600 text-sm">{inlineError}</p>}
+            <div className="flex gap-2 pt-2">
+              {pool.status === 'FORMING' && (
+                <>
+                  <button onClick={() => onAdvance('ARRIVED')} disabled={actionLoading} className="bg-primary text-white rounded px-4 py-2 disabled:opacity-50">Mark Arrived</button>
+                  <button onClick={onCancelPool} disabled={actionLoading} className="bg-red-600 text-white rounded px-4 py-2 disabled:opacity-50">Cancel Pool</button>
+                </>
+              )}
+              {pool.status === 'ARRIVED' && (
+                <>
+                  <button onClick={() => onAdvance('IN_TRANSIT')} disabled={actionLoading} className="bg-primary text-white rounded px-4 py-2 disabled:opacity-50">Start Trip</button>
+                  <button onClick={onCancelPool} disabled={actionLoading} className="bg-red-600 text-white rounded px-4 py-2 disabled:opacity-50">Cancel Pool</button>
+                </>
+              )}
+              {pool.status === 'IN_TRANSIT' && (
+                <button onClick={() => onAdvance('COMPLETED')} disabled={actionLoading} className="bg-success text-white rounded px-4 py-2 disabled:opacity-50">Complete Trip</button>
+              )}
             </div>
           </div>
-        )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (loading) return <LoadingState label="Loading pool…" />;
+  if (error) return <ErrorState message={error.message} backHref="/driver/dashboard" backLabel="Back to dashboard" />;
+  return null;
 }

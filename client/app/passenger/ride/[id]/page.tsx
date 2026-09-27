@@ -1,9 +1,13 @@
 'use client';
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { apiFetch, uuid, clearToken } from '@/lib/api';
+import Link from 'next/link';
+import { apiFetch, uuid, clearToken, isSessionExpired } from '@/lib/api';
+import { usePolling } from '@/lib/usePolling';
 import { ZONE_LABELS, Zone } from '@/lib/zones';
+import { StatusBadge } from '@/components/StatusBadge';
+import { LoadingState } from '@/components/LoadingState';
+import { ErrorState } from '@/components/ErrorState';
 
 interface RideResponse {
   id: string;
@@ -25,156 +29,99 @@ interface RideResponse {
   cancelledAt: string | null;
 }
 
-export default function RideStatusPage() {
+export default function PassengerRidePage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
-  const rideId = params?.id;
+  const rideId = params.id;
+  const [inlineError, setInlineError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const [ride, setRide] = useState<RideResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [cancelling, setCancelling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function load() {
-    if (!rideId) return;
-    try {
-      const data = await apiFetch<RideResponse>(`/api/rides/${rideId}`);
-      setRide(data);
-    } catch (err) {
-      if (err instanceof Error && (err.message === 'UNAUTHENTICATED' || err.message === 'TOKEN_EXPIRED')) {
-        clearToken();
-        router.push('/login');
-        return;
-      }
-      setError(err instanceof Error ? err.message : 'Failed to load ride');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data, error, loading, refresh } = usePolling<RideResponse>(
+    () => apiFetch<RideResponse>(`/api/rides/${rideId}`),
+    3000
+  );
 
   useEffect(() => {
-    load();
-  }, [rideId]);
+    if (isSessionExpired(error)) {
+      clearToken();
+      router.push('/login');
+    }
+  }, [error, router]);
 
-  async function handleCancel() {
-    if (!rideId) return;
-    setCancelling(true);
-    setError(null);
+  async function onCancel() {
+    setInlineError(null);
+    setActionLoading(true);
     try {
-      await apiFetch(`/api/rides/${rideId}/cancel`, {
-        method: 'POST',
-        idempotencyKey: uuid(),
-      });
-      await load();
+      await apiFetch(`/api/rides/${rideId}/cancel`, { method: 'POST', idempotencyKey: uuid() });
+      await refresh();
     } catch (err) {
-      if (err instanceof Error && (err.message === 'UNAUTHENTICATED' || err.message === 'TOKEN_EXPIRED')) {
+      if (isSessionExpired(err)) {
         clearToken();
         router.push('/login');
         return;
       }
-      setError(err instanceof Error ? err.message : 'Failed to cancel ride');
+      if (err instanceof Error) {
+        if (err.message === 'INVALID_TRANSITION') setInlineError('Cannot cancel once the driver has arrived.');
+        else if (err.message === 'ALREADY_CANCELLED') setInlineError('This ride is already cancelled.');
+        else setInlineError(err.message);
+      }
     } finally {
-      setCancelling(false);
+      setActionLoading(false);
     }
   }
 
-  if (loading) {
+  // DATA-FIRST RENDERING: if data exists, render it even if error is set.
+  // This prevents flicker on transient poll failures.
+  if (data) {
+    const canCancel = data.status === 'WAITING' || (data.status === 'MATCHED' && data.pool?.status === 'FORMING');
     return (
-      <div className="min-h-screen bg-surface text-ink p-8 font-sans flex items-center justify-center">
-        <p className="text-ink-muted">Loading ride details…</p>
-      </div>
-    );
-  }
-
-  if (error && !ride) {
-    return (
-      <div className="min-h-screen bg-surface text-ink p-8 font-sans flex items-center justify-center">
-        <div className="bg-card rounded-lg p-6 max-w-lg w-full text-center space-y-4 shadow">
-          <p className="text-red-600">{error}</p>
-          <Link href="/passenger/book" className="text-primary hover:underline">
-            Back to Booking
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (!ride) return null;
-
-  const pickupLabel = ZONE_LABELS[ride.pickupZone as Zone] || ride.pickupZone;
-  const dropoffLabel = ZONE_LABELS[ride.dropoffZone as Zone] || ride.dropoffZone;
-
-  return (
-    <div className="min-h-screen bg-surface text-ink p-8 font-sans">
-      <div className="bg-card rounded-lg p-6 max-w-lg mx-auto space-y-4 shadow">
-        <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-serif">Ride Status</h1>
-          <span
-            className={`text-xs px-2.5 py-1 rounded font-semibold ${
-              ride.status === 'WAITING'
-                ? 'bg-amber-100 text-amber-800'
-                : ride.status === 'MATCHED'
-                ? 'bg-blue-100 text-blue-800'
-                : ride.status === 'COMPLETED'
-                ? 'bg-green-100 text-green-800'
-                : ride.status === 'CANCELLED'
-                ? 'bg-gray-200 text-gray-700'
-                : 'bg-purple-100 text-purple-800'
-            }`}
-          >
-            {ride.status}
-          </span>
-        </div>
-
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-
-        <div className="border-t border-b py-3 space-y-2 text-sm">
-          <p><strong>Route:</strong> {pickupLabel} → {dropoffLabel}</p>
-          <p><strong>Requested Seats:</strong> {ride.requestedSeats}</p>
-          <p>
-            <strong>Fare:</strong> ৳{(ride.pricing.perSeatPooledFarePoysha / 100).toFixed(2)} / seat (Total: ৳{(ride.pricing.totalPooledFarePoysha / 100).toFixed(2)})
-          </p>
-          <p className="text-xs text-ink-muted">
-            <strong>Requested at:</strong> {new Date(ride.createdAt).toLocaleString()}
-          </p>
-          {ride.cancelledAt && (
-            <p className="text-xs text-red-600">
-              <strong>Cancelled at:</strong> {new Date(ride.cancelledAt).toLocaleString()}
-            </p>
-          )}
-        </div>
-
-        {ride.pool && (
-          <div className="bg-blue-50 border border-blue-200 text-blue-900 p-4 rounded-md space-y-2 text-sm">
-            <h2 className="font-semibold text-base">Vehicle & Pool Info</h2>
-            <p><strong>Driver:</strong> {ride.pool.driver.fullName}</p>
-            <p><strong>Vehicle:</strong> {ride.pool.driver.vehicleName}</p>
-            <p><strong>Occupied Seats:</strong> {ride.pool.occupiedSeats} / {ride.pool.totalCapacity}</p>
-            {ride.pool.driverArrivedAt && (
-              <p><strong>Driver Arrived:</strong> {new Date(ride.pool.driverArrivedAt).toLocaleTimeString()}</p>
+      <div className="min-h-screen bg-surface text-ink p-8">
+        <div className="max-w-lg mx-auto space-y-6">
+          <Link href="/passenger/history" className="text-primary underline">Back to history</Link>
+          <div className="bg-card rounded-lg p-6 shadow space-y-4">
+            <div className="flex items-center justify-between">
+              <h1 className="text-2xl font-serif">Ride status</h1>
+              <StatusBadge status={data.status} />
+            </div>
+            <div>
+              <p className="text-ink-muted text-sm">Route</p>
+              <p className="text-lg">{ZONE_LABELS[data.pickupZone as Zone]} → {ZONE_LABELS[data.dropoffZone as Zone]}</p>
+            </div>
+            <div>
+              <p className="text-ink-muted text-sm">Seats</p>
+              <p className="text-lg">{data.requestedSeats}</p>
+            </div>
+            <div>
+              <p className="text-ink-muted text-sm">Fare</p>
+              <p className="text-lg">৳{(data.pricing.perSeatPooledFarePoysha / 100).toFixed(2)} per seat</p>
+              <p className="text-sm text-ink-muted">Total: ৳{(data.pricing.totalPooledFarePoysha / 100).toFixed(2)}</p>
+            </div>
+            {data.pool && (
+              <div className="bg-surface-alt rounded p-4">
+                <p className="text-sm text-ink-muted">Driver</p>
+                <p>{data.pool.driver.fullName} · {data.pool.driver.vehicleName}</p>
+                <p className="text-sm mt-1">{data.pool.occupiedSeats}/{data.pool.totalCapacity} seats occupied</p>
+              </div>
+            )}
+            {inlineError && <p className="text-red-600 text-sm">{inlineError}</p>}
+            {canCancel && (
+              <button
+                onClick={onCancel}
+                disabled={actionLoading}
+                className="bg-red-600 text-white rounded px-4 py-2 disabled:opacity-50"
+              >
+                {actionLoading ? 'Cancelling…' : 'Cancel ride'}
+              </button>
             )}
           </div>
-        )}
-
-        {ride.status === 'WAITING' && (
-          <button
-            onClick={handleCancel}
-            disabled={cancelling}
-            className="w-full bg-red-600 text-white rounded px-4 py-2 hover:bg-red-700 transition disabled:opacity-50"
-          >
-            {cancelling ? 'Cancelling…' : 'Cancel Ride'}
-          </button>
-        )}
-
-        <div className="flex justify-between items-center pt-2 text-sm">
-          <Link href="/passenger/book" className="text-primary hover:underline">
-            Book Another Ride
-          </Link>
-          <Link href="/passenger/history" className="text-primary hover:underline">
-            View History
-          </Link>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (loading) return <LoadingState label="Loading ride…" />;
+
+  if (error) return <ErrorState message={error.message} backHref="/passenger/history" backLabel="Back to history" />;
+
+  return null;
 }
