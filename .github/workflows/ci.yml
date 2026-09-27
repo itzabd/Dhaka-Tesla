@@ -40,12 +40,6 @@ jobs:
         working-directory: server
         run: npm ci
 
-      - name: Create .env.test
-        working-directory: server
-        run: |
-          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/dhaka_tesla_pool" > .env.test
-          echo "JWT_SECRET=test_secret_change_me" >> .env.test
-
       - name: Build server (compiles dist/scripts/migrate.js)
         working-directory: server
         run: npm run build
@@ -54,14 +48,14 @@ jobs:
         working-directory: server
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dhaka_tesla_pool
-          JWT_SECRET: test_secret_change_me
+          JWT_SECRET: ${{ github.sha }}
         run: npm run db:migrate
 
       - name: Run tests
         working-directory: server
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dhaka_tesla_pool
-          JWT_SECRET: test_secret_change_me
+          JWT_SECRET: ${{ github.sha }}
         run: npm test
 
       - name: Install client dependencies
