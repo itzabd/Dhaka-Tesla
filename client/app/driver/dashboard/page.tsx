@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { apiFetch, clearToken } from '@/lib/api';
+import { apiFetch, clearToken, uuid } from '@/lib/api';
 import { ZONE_LABELS, Zone } from '@/lib/zones';
 
 interface VehicleInfo {
@@ -58,12 +58,14 @@ export default function DriverDashboardPage() {
   const [requests, setRequests] = useState<RequestRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [inlineError, setInlineError] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [isToggling, setIsToggling] = useState(false);
 
   async function load() {
     setLoading(true);
     setError(null);
+    setInlineError(null);
     setToggleError(null);
     try {
       const [currentRes, requestsRes] = await Promise.all([
@@ -120,6 +122,38 @@ export default function DriverDashboardPage() {
       setToggleError(err instanceof Error ? err.message : 'Failed to update online status');
     } finally {
       setIsToggling(false);
+    }
+  }
+
+  async function onAccept(requestId: string) {
+    setInlineError(null);
+    try {
+      await apiFetch(`/api/driver/requests/${requestId}/accept`, {
+        method: 'POST',
+        idempotencyKey: uuid(),
+      });
+      await load();
+    } catch (err) {
+      if (err instanceof Error) {
+        if (err.message === 'UNAUTHENTICATED' || err.message === 'TOKEN_EXPIRED') {
+          clearToken();
+          router.push('/login');
+          return;
+        }
+        if (err.message === 'CAPACITY_EXCEEDED') {
+          setInlineError("This request exceeds Bullet's remaining capacity.");
+        } else if (err.message === 'INCOMPATIBLE_ROUTE') {
+          setInlineError("This request is outside the current pool's corridor.");
+        } else if (err.message === 'DRIVER_OFFLINE') {
+          setInlineError('Go online before accepting rides.');
+        } else if (err.message === 'INVALID_TRANSITION') {
+          setInlineError('This request is no longer available.');
+        } else if (err.message === 'RIDE_NOT_FOUND') {
+          setInlineError('This request no longer exists.');
+        } else {
+          setInlineError(err.message);
+        }
+      }
     }
   }
 
@@ -274,6 +308,12 @@ export default function DriverDashboardPage() {
         <div className="bg-card rounded-lg p-6 shadow space-y-4">
           <h2 className="text-xl font-semibold font-serif">Ride Requests Inbox</h2>
 
+          {inlineError && (
+            <div className="bg-red-50 text-red-700 p-3 rounded mt-4">
+              {inlineError}
+            </div>
+          )}
+
           {!current?.vehicle.isOnline ? (
             <p className="text-sm text-ink-muted">You&apos;re offline.</p>
           ) : requests.length === 0 ? (
@@ -303,10 +343,10 @@ export default function DriverDashboardPage() {
 
                   <div>
                     <button
-                      disabled
-                      className="w-full bg-zinc-300 text-zinc-500 rounded px-4 py-2 text-sm font-medium cursor-not-allowed"
+                      onClick={() => onAccept(r.id)}
+                      className="w-full bg-primary hover:bg-primary-dark text-white rounded px-4 py-2 text-sm font-medium"
                     >
-                      Accept (Phase 6)
+                      Accept
                     </button>
                   </div>
                 </div>
