@@ -5,6 +5,7 @@ import { requireRole } from '../middleware/requireRole';
 import {
   setOnlineStatus,
   listEligibleRequests,
+  getCurrentPool,
   DriverVehicleMissingError,
   ActivePoolBlocksOfflineError,
 } from '../services/driverService';
@@ -99,4 +100,35 @@ driverRouter.get(
     }
   }
 );
+
+driverRouter.get(
+  '/pools/current',
+  authenticate,
+  requireRole('DRIVER'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: { code: 'UNAUTHENTICATED' } });
+        return;
+      }
+
+      try {
+        const result = await getCurrentPool({
+          driverId: req.user.userId,
+        });
+
+        res.status(200).json(result);
+      } catch (err) {
+        if (err instanceof DriverVehicleMissingError) {
+          res.status(404).json({ error: { code: 'VEHICLE_NOT_FOUND' } });
+          return;
+        }
+        throw err;
+      }
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 
