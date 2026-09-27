@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dhaka_tesla_pool
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dhaka_tesla_pool"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: ./server
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/dhaka_tesla_pool
+      JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_change_me}
+      NODE_ENV: ${NODE_ENV:-development}
+    ports: ["4000:4000"]
+    command: sh -c "npm run db:migrate && npm run db:seed && npm start"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  client:
+    build: ./client
+    depends_on:
+      api: { condition: service_healthy }
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+    ports: ["3000:3000"]
+
+volumes:
+  pgdata:
