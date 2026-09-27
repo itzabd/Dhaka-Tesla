@@ -56,6 +56,7 @@ let jashimVehicleId: string;
 let nusratToken: string;
 let rafiqToken: string;
 let secondDriverToken: string;
+let secondDriverId: string | undefined;
 let secondVehicleId: string;
 
 beforeAll(async () => {
@@ -73,20 +74,23 @@ beforeAll(async () => {
   rafiqToken  = await login('+8801722222222');
 
   // Create second driver with own vehicle
-  const secondDriver = await pool.query(
-    `INSERT INTO users (full_name, phone, password_hash, role)
-     VALUES ('Kamal', '+8801988888888',
+  await pool.query(
+    `INSERT INTO users (id, full_name, phone, password_hash, role)
+     VALUES ('00000000-0000-0000-0000-000000000099', 'Kamal', '+8801988888888',
              (SELECT password_hash FROM users WHERE phone = '+8801744444444'),
              'DRIVER')
-     RETURNING id`
+     ON CONFLICT (phone) DO NOTHING`
   );
+  const secondDriverRes = await pool.query('SELECT id FROM users WHERE phone = $1', ['+8801988888888']);
+  secondDriverId = secondDriverRes.rows[0].id;
   await pool.query(
-    `INSERT INTO vehicles (driver_id, name, capacity, is_online)
-     VALUES ($1, 'Bullet-2', 3, TRUE)`,
-    [secondDriver.rows[0].id]
+    `INSERT INTO vehicles (id, driver_id, name, capacity, is_online)
+     VALUES ('00000000-0000-0000-0000-0000000000a0', $1, 'Bullet-2', 3, TRUE)
+     ON CONFLICT (driver_id) DO NOTHING`,
+    [secondDriverId]
   );
   secondDriverToken = await login('+8801988888888');
-  const v2 = await pool.query('SELECT id FROM vehicles WHERE driver_id = $1', [secondDriver.rows[0].id]);
+  const v2 = await pool.query('SELECT id FROM vehicles WHERE driver_id = $1', [secondDriverId]);
   secondVehicleId = v2.rows[0].id;
 }, 30000);
 
@@ -96,6 +100,10 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  if (secondDriverId) {
+    await pool.query('DELETE FROM vehicles WHERE driver_id = $1', [secondDriverId]);
+    await pool.query('DELETE FROM users WHERE id = $1', [secondDriverId]);
+  }
   await pool.end();
 });
 
