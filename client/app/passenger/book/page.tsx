@@ -2,8 +2,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { apiFetch, uuid, clearToken } from '@/lib/api';
+import { apiFetch, uuid, clearToken, isSessionExpired } from '@/lib/api';
 import { ZONES, ZONE_LABELS, Zone } from '@/lib/zones';
+import { LoadingState } from '@/components/LoadingState';
+import { ErrorState } from '@/components/ErrorState';
 
 interface BookResponse {
   id: string;
@@ -38,7 +40,7 @@ export default function BookRidePage() {
       });
       setBookedRide(data);
     } catch (err) {
-      if (err instanceof Error && (err.message === 'UNAUTHENTICATED' || err.message === 'TOKEN_EXPIRED')) {
+      if (isSessionExpired(err)) {
         clearToken();
         router.push('/login');
         return;
@@ -59,7 +61,11 @@ export default function BookRidePage() {
           </Link>
         </div>
 
-        {bookedRide ? (
+        {error && <ErrorState message={error} />}
+
+        {loading ? (
+          <LoadingState label="Calculating fare…" />
+        ) : bookedRide ? (
           <div className="space-y-4">
             <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-md space-y-2">
               <h2 className="font-semibold text-lg">Ride Requested!</h2>
@@ -128,14 +134,12 @@ export default function BookRidePage() {
               </select>
             </div>
 
-            {error && <p className="text-red-600 text-sm">{error}</p>}
-
             <button
               type="submit"
               disabled={loading}
               className="bg-primary text-white rounded px-4 py-2 w-full disabled:opacity-50 hover:opacity-90 transition"
             >
-              {loading ? 'Requesting Ride…' : 'Request Pool Ride'}
+              Request Pool Ride
             </button>
           </form>
         )}

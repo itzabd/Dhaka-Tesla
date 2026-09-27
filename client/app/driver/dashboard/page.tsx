@@ -2,8 +2,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { apiFetch, clearToken, uuid } from '@/lib/api';
+import { apiFetch, clearToken, uuid, isSessionExpired } from '@/lib/api';
 import { ZONE_LABELS, Zone } from '@/lib/zones';
+import { StatusBadge } from '@/components/StatusBadge';
+import { LoadingState } from '@/components/LoadingState';
+import { ErrorState } from '@/components/ErrorState';
+import { EmptyState } from '@/components/EmptyState';
 
 interface VehicleInfo {
   id: string;
@@ -75,7 +79,7 @@ export default function DriverDashboardPage() {
       setCurrent(currentRes);
       setRequests(requestsRes.data || []);
     } catch (err) {
-      if (err instanceof Error && (err.message === 'UNAUTHENTICATED' || err.message === 'TOKEN_EXPIRED')) {
+      if (isSessionExpired(err)) {
         clearToken();
         router.push('/login');
         return;
@@ -92,6 +96,7 @@ export default function DriverDashboardPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleToggleOnline() {
@@ -106,7 +111,7 @@ export default function DriverDashboardPage() {
       setCurrent((prev) => (prev ? { ...prev, vehicle: { ...prev.vehicle, isOnline: res.isOnline } } : null));
       await load();
     } catch (err) {
-      if (err instanceof Error && (err.message === 'UNAUTHENTICATED' || err.message === 'TOKEN_EXPIRED')) {
+      if (isSessionExpired(err)) {
         clearToken();
         router.push('/login');
         return;
@@ -134,12 +139,12 @@ export default function DriverDashboardPage() {
       });
       await load();
     } catch (err) {
+      if (isSessionExpired(err)) {
+        clearToken();
+        router.push('/login');
+        return;
+      }
       if (err instanceof Error) {
-        if (err.message === 'UNAUTHENTICATED' || err.message === 'TOKEN_EXPIRED') {
-          clearToken();
-          router.push('/login');
-          return;
-        }
         if (err.message === 'CAPACITY_EXCEEDED') {
           setInlineError("This request exceeds Bullet's remaining capacity.");
         } else if (err.message === 'INCOMPATIBLE_ROUTE') {
@@ -155,6 +160,10 @@ export default function DriverDashboardPage() {
         }
       }
     }
+  }
+
+  if (loading && !current) {
+    return <LoadingState label="Loading dashboard…" />;
   }
 
   return (
@@ -183,11 +192,7 @@ export default function DriverDashboardPage() {
           </div>
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-            {error}
-          </div>
-        )}
+        {error && <ErrorState message={error} />}
 
         {/* Vehicle & Online Status */}
         {current && (
@@ -246,9 +251,7 @@ export default function DriverDashboardPage() {
             <div className="space-y-4">
               <div className="flex flex-wrap justify-between items-center gap-2 border-b pb-3">
                 <div className="flex items-center gap-2">
-                  <span className="bg-success text-white rounded px-2 py-1 text-sm">
-                    {current.pool.status}
-                  </span>
+                  <StatusBadge status={current.pool.status} />
                   <span className="text-sm text-ink-muted">
                     {current.pool.occupiedSeats} / {current.pool.totalCapacity} seats occupied
                   </span>
@@ -317,7 +320,7 @@ export default function DriverDashboardPage() {
           {!current?.vehicle.isOnline ? (
             <p className="text-sm text-ink-muted">You&apos;re offline.</p>
           ) : requests.length === 0 ? (
-            <p className="text-sm text-ink-muted">No eligible requests yet.</p>
+            <EmptyState message="No eligible requests yet." hint="Toggle online to see incoming rides." />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               {requests.map((r) => (
