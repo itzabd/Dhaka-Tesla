@@ -7,6 +7,7 @@ import {
   createRideRequest,
   getRideById,
   cancelRide,
+  listRideHistory,
   InvalidZoneError,
   InvalidSeatsError,
 } from '../services/rideService';
@@ -143,6 +144,62 @@ ridesRouter.post(
           amountPoysha: 0,
           method: 'NONE',
           reason: 'Cash payment — no refund required',
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+ridesRouter.get(
+  '/history',
+  authenticate,
+  requireRole('PASSENGER'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: { code: 'UNAUTHENTICATED' } });
+        return;
+      }
+
+      let limit = 20;
+      if (req.query.limit) {
+        const parsedLimit = parseInt(req.query.limit as string, 10);
+        if (!isNaN(parsedLimit) && parsedLimit > 0) {
+          limit = Math.min(parsedLimit, 100);
+        }
+      }
+
+      let parsed: { c: string; i: string } | null = null;
+      if (req.query.cursor) {
+        try {
+          parsed = JSON.parse(Buffer.from(req.query.cursor as string, 'base64').toString());
+          if (!parsed || typeof parsed.c !== 'string' || typeof parsed.i !== 'string') {
+            throw new Error('shape');
+          }
+        } catch {
+          res.status(400).json({ error: { code: 'VALIDATION_ERROR', detail: 'Invalid cursor' } });
+          return;
+        }
+      }
+
+      const { rows, nextCursor } = await listRideHistory({
+        passengerId: req.user.userId,
+        limit,
+        cursorCreatedAt: parsed?.c,
+        cursorId: parsed?.i,
+      });
+
+      const encodedNextCursor = nextCursor
+        ? Buffer.from(JSON.stringify({ c: nextCursor.createdAt, i: nextCursor.id })).toString('base64')
+        : null;
+
+      res.status(200).json({
+        data: rows,
+        pagination: {
+          nextCursor: encodedNextCursor,
+          hasMore: encodedNextCursor !== null,
         },
       });
     } catch (err) {
