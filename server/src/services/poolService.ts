@@ -45,6 +45,22 @@ export class PoolRouteIncompatibleError extends Error {
   }
 }
 
+export class PoolNotFoundError extends Error {
+  code = 'POOL_NOT_FOUND';
+  constructor(message = 'Pool not found') {
+    super(message);
+    this.name = 'PoolNotFoundError';
+  }
+}
+
+export class InvalidPoolTransitionError extends Error {
+  code = 'INVALID_TRANSITION';
+  constructor(message = 'Invalid pool transition') {
+    super(message);
+    this.name = 'InvalidPoolTransitionError';
+  }
+}
+
 export async function acceptPassengerIntoPool(input: {
   driverId: string;
   rideRequestId: string;
@@ -240,3 +256,128 @@ export async function acceptPassengerIntoPool(input: {
     client.release();
   }
 }
+
+export async function advancePoolStatus(input: {
+  driverId: string;
+  poolId: string;
+  targetStatus: 'ARRIVED' | 'IN_TRANSIT' | 'COMPLETED';
+}): Promise<{
+  poolId: string;
+  status: 'ARRIVED' | 'IN_TRANSIT' | 'COMPLETED';
+  driverArrivedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+}> {
+  let expectedFrom: string;
+  let eventType: string;
+
+  if (input.targetStatus === 'ARRIVED') {
+    expectedFrom = 'FORMING';
+    eventType = 'POOL_ARRIVED';
+  } else if (input.targetStatus === 'IN_TRANSIT') {
+    expectedFrom = 'ARRIVED';
+    eventType = 'POOL_STARTED';
+  } else if (input.targetStatus === 'COMPLETED') {
+    expectedFrom = 'IN_TRANSIT';
+    eventType = 'POOL_COMPLETED';
+  } else {
+    throw new InvalidPoolTransitionError();
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // LEVEL 1 LOCK: vehicles
+    const vehicleResult = await client.query(
+      `SELECT id FROM vehicles WHERE driver_id = $1 AND is_active = TRUE FOR UPDATE`,
+      [input.driverId]
+    );
+    if (vehicleResult.rowCount === 0) throw new DriverVehicleMissingError();
+    const vehicleId = vehicleResult.rows[0].id;
+
+    // LEVEL 2 LOCK: ride_pools (ownership-scoped)
+    const poolResult = await client.query(
+      `SELECT id, status FROM ride_pools
+       WHERE id = $1 AND vehicle_id = $2
+       FOR UPDATE`,
+      [input.poolId, vehicleId]
+    );
+    if (poolResult.rowCount === 0) throw new PoolNotFoundError();
+    if (poolResult.rows[0].status !== expectedFrom) throw new InvalidPoolTransitionError();
+
+    // LEVEL 3 LOCK: ride_requests (all active members, UUID ASC)
+    await client.query(
+      `SELECT id FROM ride_requests
+       WHERE id IN (
+         SELECT ride_request_id FROM pool_members
+         WHERE pool_id = $1 AND status = 'ACTIVE'
+       )
+       ORDER BY id ASC
+       FOR UPDATE`,
+      [input.poolId]
+    );
+
+    // LEVEL 2 MUTATION: ride_pools
+    const updatedResult = await client.query(
+      `UPDATE ride_pools
+       SET status = $1::vehicle_pool_status,
+           driver_arrived_at = CASE WHEN $1::text = 'ARRIVED'    THEN NOW() ELSE driver_arrived_at END,
+           started_at        = CASE WHEN $1::text = 'IN_TRANSIT' THEN NOW() ELSE started_at END,
+           completed_at      = CASE WHEN $1::text = 'COMPLETED'  THEN NOW() ELSE completed_at END
+       WHERE id = $2
+       RETURNING status, driver_arrived_at, started_at, completed_at`,
+      [input.targetStatus, input.poolId]
+    );
+    const updated = updatedResult.rows[0];
+
+    // LEVEL 3 MUTATION: ride_requests (passengers)
+    await client.query(
+      `UPDATE ride_requests
+       SET status = CASE $1::text
+                      WHEN 'IN_TRANSIT' THEN 'IN_PROGRESS'::passenger_request_status
+                      WHEN 'COMPLETED'  THEN 'COMPLETED'::passenger_request_status
+                      ELSE status
+                    END,
+           completed_at = CASE WHEN $1::text = 'COMPLETED' THEN NOW() ELSE completed_at END
+       WHERE id IN (
+         SELECT ride_request_id FROM pool_members
+         WHERE pool_id = $2 AND status = 'ACTIVE'
+       )`,
+      [input.targetStatus, input.poolId]
+    );
+
+    // LEVEL 5 MUTATION: ride_events (one event per active passenger)
+    await client.query(
+      `INSERT INTO ride_events (actor_user_id, ride_request_id, pool_id, pool_member_id,
+                                event_type, from_status, to_status)
+       SELECT $1, pm.ride_request_id, $2, pm.id,
+              $3, $4, $5
+       FROM pool_members pm
+       WHERE pm.pool_id = $2 AND pm.status = 'ACTIVE'`,
+      [input.driverId, input.poolId, eventType, expectedFrom, input.targetStatus]
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      poolId: input.poolId,
+      status: updated.status,
+      driverArrivedAt: updated.driver_arrived_at
+        ? (updated.driver_arrived_at instanceof Date ? updated.driver_arrived_at.toISOString() : String(updated.driver_arrived_at))
+        : null,
+      startedAt: updated.started_at
+        ? (updated.started_at instanceof Date ? updated.started_at.toISOString() : String(updated.started_at))
+        : null,
+      completedAt: updated.completed_at
+        ? (updated.completed_at instanceof Date ? updated.completed_at.toISOString() : String(updated.completed_at))
+        : null,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
