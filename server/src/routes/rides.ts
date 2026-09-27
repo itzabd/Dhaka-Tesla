@@ -6,6 +6,7 @@ import { idempotency } from '../middleware/idempotency';
 import {
   createRideRequest,
   getRideById,
+  cancelRide,
   InvalidZoneError,
   InvalidSeatsError,
 } from '../services/rideService';
@@ -81,6 +82,69 @@ ridesRouter.post(
         }
         throw err;
       }
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+ridesRouter.post(
+  '/:id/cancel',
+  authenticate,
+  requireRole('PASSENGER'),
+  idempotency,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: { code: 'UNAUTHENTICATED' } });
+        return;
+      }
+
+      const result = await cancelRide({
+        rideId: req.params.id,
+        passengerId: req.user.userId,
+      });
+
+      if (!result.ok) {
+        switch (result.reason) {
+          case 'NOT_FOUND':
+            res.status(404).json({ error: { code: 'RIDE_NOT_FOUND' } });
+            return;
+          case 'FORBIDDEN':
+            res.status(403).json({ error: { code: 'FORBIDDEN' } });
+            return;
+          case 'INVALID_TRANSITION':
+            res.status(400).json({
+              error: {
+                code: 'INVALID_TRANSITION',
+                detail: 'Cannot cancel ride once driver has arrived or trip is in transit',
+              },
+            });
+            return;
+          case 'ALREADY_CANCELLED':
+            res.status(409).json({ error: { code: 'ALREADY_CANCELLED' } });
+            return;
+          case 'DATA_INTEGRITY':
+            res.status(500).json({
+              error: {
+                code: 'INTERNAL_ERROR',
+                detail: 'Inconsistent ride state',
+              },
+            });
+            return;
+        }
+      }
+
+      res.status(200).json({
+        id: req.params.id,
+        status: 'CANCELLED',
+        cancelledAt: result.cancelledAt,
+        refund: {
+          amountPoysha: 0,
+          method: 'NONE',
+          reason: 'Cash payment — no refund required',
+        },
+      });
     } catch (err) {
       next(err);
     }
