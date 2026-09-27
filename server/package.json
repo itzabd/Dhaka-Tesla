@@ -9,7 +9,7 @@
     "postbuild": "node scripts/copy-db.cjs",
     "db:migrate": "node dist/scripts/migrate.js",
     "db:seed": "node dist/scripts/seed.js",
-    "test": "jest"
+    "test": "jest --runInBand"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
