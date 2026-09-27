@@ -2,14 +2,23 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/requireRole';
+import { idempotency } from '../middleware/idempotency';
 import {
   setOnlineStatus,
   listEligibleRequests,
   getCurrentPool,
   listDriverHistory,
-  DriverVehicleMissingError,
   ActivePoolBlocksOfflineError,
 } from '../services/driverService';
+import {
+  acceptPassengerIntoPool,
+  DriverOfflineError,
+  RideRequestNotFoundError,
+  RequestNotWaitingError,
+  PoolCapacityExceededError,
+  PoolRouteIncompatibleError,
+  DriverVehicleMissingError,
+} from '../services/poolService';
 
 export const driverRouter = Router();
 
@@ -191,6 +200,68 @@ driverRouter.get(
         throw err;
       }
     } catch (err) {
+      next(err);
+    }
+  }
+);
+
+driverRouter.post(
+  '/requests/:id/accept',
+  authenticate,
+  requireRole('DRIVER'),
+  idempotency,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: { code: 'UNAUTHENTICATED' } });
+        return;
+      }
+
+      const result = await acceptPassengerIntoPool({
+        driverId: req.user.userId,
+        rideRequestId: req.params.id,
+      });
+
+      res.status(200).json({
+        message: 'Passenger accepted into pool',
+        poolId: result.poolId,
+        occupiedSeats: result.occupiedSeats,
+        totalCapacity: result.totalCapacity,
+        individualFarePoysha: result.individualFarePoysha,
+      });
+    } catch (err) {
+      if (err instanceof DriverVehicleMissingError) {
+        res.status(404).json({ error: { code: 'VEHICLE_NOT_FOUND' } });
+        return;
+      }
+      if (err instanceof RideRequestNotFoundError) {
+        res.status(404).json({ error: { code: 'RIDE_NOT_FOUND' } });
+        return;
+      }
+      if (err instanceof DriverOfflineError) {
+        res.status(409).json({
+          error: { code: 'DRIVER_OFFLINE', detail: 'Driver must be online to accept rides' },
+        });
+        return;
+      }
+      if (err instanceof RequestNotWaitingError) {
+        res.status(400).json({
+          error: { code: 'INVALID_TRANSITION', detail: 'Request is no longer available' },
+        });
+        return;
+      }
+      if (err instanceof PoolRouteIncompatibleError) {
+        res.status(400).json({
+          error: { code: 'INCOMPATIBLE_ROUTE', detail: 'Dropoff extends beyond active trip' },
+        });
+        return;
+      }
+      if (err instanceof PoolCapacityExceededError) {
+        res.status(409).json({
+          error: { code: 'CAPACITY_EXCEEDED', detail: 'Bullet has only 1 seat remaining' },
+        });
+        return;
+      }
       next(err);
     }
   }
