@@ -2,11 +2,14 @@ import express, { Request, Response } from 'express';
 import pinoHttp from 'pino-http';
 import { pool } from './config/db';
 import { errorHandler } from './middleware/errorHandler';
+import { authRouter } from './routes/auth';
 
-const app = express();
+export const app = express();
 
 app.use(express.json());
 app.use(pinoHttp());
+
+app.use('/api/auth', authRouter);
 
 app.get('/health', async (_req: Request, res: Response) => {
   try {
