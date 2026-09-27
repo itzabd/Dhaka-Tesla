@@ -1,12 +1,25 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
+export class ApiError extends Error {
+  code: string;
+  status: number;
+  constructor(code: string, status: number, message?: string) {
+    super(message ?? code);
+    this.name = 'ApiError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return window.localStorage.getItem('token');
 }
+
 export function setToken(token: string): void {
   window.localStorage.setItem('token', token);
 }
+
 export function clearToken(): void {
   window.localStorage.removeItem('token');
 }
@@ -26,8 +39,9 @@ export async function apiFetch<T>(
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const code = body?.error?.code || body?.error?.detail || 'Request failed';
-    throw new Error(code);
+    const code = body?.error?.code || 'REQUEST_FAILED';
+    const detail = body?.error?.detail || body?.error?.message;
+    throw new ApiError(code, res.status, detail);
   }
   return body as T;
 }
@@ -41,4 +55,8 @@ export function uuid(): string {
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
+}
+
+export function isSessionExpired(err: unknown): boolean {
+  return err instanceof ApiError && (err.code === 'UNAUTHENTICATED' || err.code === 'TOKEN_EXPIRED');
 }
