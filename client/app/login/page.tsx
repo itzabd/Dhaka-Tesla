@@ -20,9 +20,7 @@ export default function LoginPage() {
         body: JSON.stringify({ phone, password }),
       });
       setToken(data.token);
-      // Phase 4: all users land on the passenger book page.
-      // Phase 5 will restore the role-based redirect to /driver/dashboard.
-      router.push('/passenger/book');
+      router.push(data.user.role === 'DRIVER' ? '/driver/dashboard' : '/passenger/book');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
