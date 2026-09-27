@@ -12,12 +12,16 @@ import {
 } from '../services/driverService';
 import {
   acceptPassengerIntoPool,
+  advancePoolStatus,
+  cancelActivePool,
   DriverOfflineError,
   RideRequestNotFoundError,
   RequestNotWaitingError,
   PoolCapacityExceededError,
   PoolRouteIncompatibleError,
   DriverVehicleMissingError,
+  PoolNotFoundError,
+  InvalidPoolTransitionError,
 } from '../services/poolService';
 
 export const driverRouter = Router();
@@ -266,6 +270,106 @@ driverRouter.post(
     }
   }
 );
+
+const poolStatusSchema = z.object({
+  status: z.enum(['ARRIVED', 'IN_TRANSIT', 'COMPLETED']),
+});
+
+driverRouter.patch(
+  '/pools/:id/status',
+  authenticate,
+  requireRole('DRIVER'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: { code: 'UNAUTHENTICATED' } });
+        return;
+      }
+
+      const parsed = poolStatusSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: { code: 'VALIDATION_ERROR', detail: parsed.error.issues[0]?.message ?? 'Invalid status' },
+        });
+        return;
+      }
+
+      const result = await advancePoolStatus({
+        driverId: req.user.userId,
+        poolId: req.params.id,
+        targetStatus: parsed.data.status,
+      });
+
+      res.status(200).json({
+        poolId: result.poolId,
+        status: result.status,
+        driverArrivedAt: result.driverArrivedAt,
+        startedAt: result.startedAt,
+        completedAt: result.completedAt,
+      });
+    } catch (err) {
+      if (err instanceof DriverVehicleMissingError) {
+        res.status(404).json({ error: { code: 'VEHICLE_NOT_FOUND' } });
+        return;
+      }
+      if (err instanceof PoolNotFoundError) {
+        res.status(404).json({ error: { code: 'POOL_NOT_FOUND' } });
+        return;
+      }
+      if (err instanceof InvalidPoolTransitionError) {
+        res.status(400).json({
+          error: { code: 'INVALID_TRANSITION', detail: 'Pool is not in the expected state for this transition' },
+        });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
+driverRouter.post(
+  '/pools/:id/cancel',
+  authenticate,
+  requireRole('DRIVER'),
+  idempotency,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: { code: 'UNAUTHENTICATED' } });
+        return;
+      }
+
+      const result = await cancelActivePool({
+        driverId: req.user.userId,
+        poolId: req.params.id,
+      });
+
+      res.status(200).json({
+        poolId: result.poolId,
+        status: 'CANCELLED',
+        cancelledAt: result.cancelledAt,
+        affectedRequests: result.affectedRequests,
+      });
+    } catch (err) {
+      if (err instanceof DriverVehicleMissingError) {
+        res.status(404).json({ error: { code: 'VEHICLE_NOT_FOUND' } });
+        return;
+      }
+      if (err instanceof PoolNotFoundError) {
+        res.status(404).json({ error: { code: 'POOL_NOT_FOUND' } });
+        return;
+      }
+      if (err instanceof InvalidPoolTransitionError) {
+        res.status(400).json({
+          error: { code: 'INVALID_TRANSITION', detail: 'Cannot cancel pool once trip has started' },
+        });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
 
 
 
