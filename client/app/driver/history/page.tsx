@@ -2,8 +2,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { apiFetch, clearToken } from '@/lib/api';
+import { apiFetch, clearToken, isSessionExpired } from '@/lib/api';
 import { ZONE_LABELS, Zone } from '@/lib/zones';
+import { StatusBadge } from '@/components/StatusBadge';
+import { LoadingState } from '@/components/LoadingState';
+import { ErrorState } from '@/components/ErrorState';
+import { EmptyState } from '@/components/EmptyState';
 
 interface HistoryRow {
   poolId: string;
@@ -27,38 +31,66 @@ interface HistoryResponse {
 
 export default function DriverHistoryPage() {
   const router = useRouter();
-  const [history, setHistory] = useState<HistoryRow[]>([]);
+  const [rows, setRows] = useState<HistoryRow[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchHistory() {
+  async function load() {
+    try {
       setLoading(true);
       setError(null);
-      try {
-        const res = await apiFetch<HistoryResponse>('/api/driver/history');
-        setHistory(res.data || []);
-      } catch (err) {
-        if (err instanceof Error && (err.message === 'UNAUTHENTICATED' || err.message === 'TOKEN_EXPIRED')) {
-          clearToken();
-          router.push('/login');
-          return;
-        }
-        if (err instanceof Error && err.message === 'VEHICLE_NOT_FOUND') {
-          setError('Your account has no active vehicle.');
-          return;
-        }
-        setError(err instanceof Error ? err.message : 'Failed to load history');
-      } finally {
-        setLoading(false);
+      const res = await apiFetch<HistoryResponse>('/api/driver/history');
+      setRows(res.data || []);
+      setNextCursor(res.pagination.nextCursor);
+    } catch (err) {
+      if (isSessionExpired(err)) {
+        clearToken();
+        router.push('/login');
+        return;
       }
+      if (err instanceof Error && err.message === 'VEHICLE_NOT_FOUND') {
+        setError('Your account has no active vehicle.');
+        return;
+      }
+      setError(err instanceof Error ? err.message : 'Failed to load history');
+    } finally {
+      setLoading(false);
     }
+  }
 
-    fetchHistory();
-  }, [router]);
+  async function onLoadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await apiFetch<HistoryResponse>(
+        `/api/driver/history?cursor=${encodeURIComponent(nextCursor)}`
+      );
+      setRows((prev) => [...prev, ...(res.data || [])]);
+      setNextCursor(res.pagination.nextCursor);
+    } catch (err) {
+      if (isSessionExpired(err)) {
+        clearToken();
+        router.push('/login');
+        return;
+      }
+      setError(err instanceof Error ? err.message : 'Failed to load more');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (loading) return <LoadingState label="Loading trips…" />;
+  if (error) return <ErrorState message={error} backHref="/driver/dashboard" backLabel="Back to dashboard" />;
 
   return (
-    <div className="min-h-screen bg-surface text-ink p-8">
+    <div className="min-h-screen bg-surface text-ink p-8 font-sans">
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex justify-between items-center">
           <div>
@@ -73,41 +105,21 @@ export default function DriverHistoryPage() {
           </Link>
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-            {error}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="bg-card rounded-lg p-6 shadow text-center text-ink-muted">
-            Loading trips...
-          </div>
-        ) : history.length === 0 ? (
-          <div className="bg-card rounded-lg p-6 shadow text-center text-ink-muted">
-            No completed trips yet.
-          </div>
+        {rows.length === 0 ? (
+          <EmptyState message="No completed trips yet." hint="Complete a pool to see it here." />
         ) : (
           <div className="space-y-4">
-            {history.map((row) => (
+            {rows.map((row) => (
               <div
                 key={row.poolId}
                 className="bg-card rounded-lg p-6 shadow space-y-3"
               >
                 <div className="flex flex-wrap justify-between items-start gap-2">
                   <div>
-                    <span
-                      className={
-                        row.status === 'COMPLETED'
-                          ? 'bg-success text-white rounded px-2 py-1 text-sm font-medium'
-                          : 'bg-zinc-500 text-white rounded px-2 py-1 text-sm font-medium'
-                      }
-                    >
-                      {row.status}
-                    </span>
+                    <StatusBadge status={row.status} />
                     <h2 className="text-lg font-semibold mt-2">
-                      {ZONE_LABELS[row.initialPickupZone as Zone] || row.initialPickupZone} &rarr;{' '}
-                      {ZONE_LABELS[row.farthestDropoffZone as Zone] || row.farthestDropoffZone}
+                      {ZONE_LABELS[row.initialPickupZone as Zone] ?? row.initialPickupZone} &rarr;{' '}
+                      {ZONE_LABELS[row.farthestDropoffZone as Zone] ?? row.farthestDropoffZone}
                     </h2>
                   </div>
                   <div className="text-right">
@@ -135,6 +147,18 @@ export default function DriverHistoryPage() {
                 </div>
               </div>
             ))}
+
+            {nextCursor !== null && (
+              <div className="text-center pt-2">
+                <button
+                  onClick={onLoadMore}
+                  disabled={loadingMore}
+                  className="bg-primary text-white rounded px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  {loadingMore ? 'Loading more…' : 'Load more'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

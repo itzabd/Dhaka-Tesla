@@ -2,8 +2,12 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { apiFetch, clearToken } from '@/lib/api';
+import { apiFetch, clearToken, isSessionExpired } from '@/lib/api';
 import { ZONE_LABELS, Zone } from '@/lib/zones';
+import { StatusBadge } from '@/components/StatusBadge';
+import { LoadingState } from '@/components/LoadingState';
+import { ErrorState } from '@/components/ErrorState';
+import { EmptyState } from '@/components/EmptyState';
 
 interface RideRow {
   id: string;
@@ -21,16 +25,20 @@ interface HistoryResponse {
 
 export default function RideHistoryPage() {
   const router = useRouter();
-  const [history, setHistory] = useState<RideRow[]>([]);
+  const [rows, setRows] = useState<RideRow[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
     try {
-      const data = await apiFetch<HistoryResponse>('/api/rides/history');
-      setHistory(data.data);
+      setLoading(true);
+      const res = await apiFetch<HistoryResponse>('/api/rides/history');
+      setRows(res.data);
+      setNextCursor(res.pagination.nextCursor);
     } catch (err) {
-      if (err instanceof Error && (err.message === 'UNAUTHENTICATED' || err.message === 'TOKEN_EXPIRED')) {
+      if (isSessionExpired(err)) {
         clearToken();
         router.push('/login');
         return;
@@ -41,9 +49,33 @@ export default function RideHistoryPage() {
     }
   }
 
+  async function onLoadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await apiFetch<HistoryResponse>(
+        `/api/rides/history?cursor=${encodeURIComponent(nextCursor)}`
+      );
+      setRows((prev) => [...prev, ...res.data]);
+      setNextCursor(res.pagination.nextCursor);
+    } catch (err) {
+      if (isSessionExpired(err)) {
+        clearToken();
+        router.push('/login');
+        return;
+      }
+      setError(err instanceof Error ? err.message : 'Failed to load more');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
   useEffect(() => {
     load();
   }, []);
+
+  if (loading) return <LoadingState label="Loading history…" />;
+  if (error) return <ErrorState message={error} backHref="/passenger/book" backLabel="Back to booking" />;
 
   return (
     <div className="min-h-screen bg-surface text-ink p-8 font-sans">
@@ -55,59 +87,46 @@ export default function RideHistoryPage() {
           </Link>
         </div>
 
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-
-        {loading ? (
-          <p className="text-ink-muted">Loading history…</p>
-        ) : history.length === 0 ? (
-          <div className="bg-card rounded-lg p-8 text-center text-ink-muted shadow">
-            <p>No rides yet</p>
-          </div>
+        {rows.length === 0 ? (
+          <EmptyState message="No rides yet." hint="Book your first ride from the dashboard." />
         ) : (
           <div className="space-y-3">
-            {history.map((ride) => {
-              const pickupLabel = ZONE_LABELS[ride.pickupZone as Zone] || ride.pickupZone;
-              const dropoffLabel = ZONE_LABELS[ride.dropoffZone as Zone] || ride.dropoffZone;
+            {rows.map((row) => (
+              <div
+                key={row.id}
+                className="bg-card rounded-lg p-4 shadow flex items-center justify-between"
+              >
+                <div>
+                  <p className="font-semibold text-base">
+                    {ZONE_LABELS[row.pickupZone as Zone] ?? row.pickupZone} → {ZONE_LABELS[row.dropoffZone as Zone] ?? row.dropoffZone}
+                  </p>
+                  <p className="text-xs text-ink-muted mt-1">
+                    {new Date(row.createdAt).toLocaleString()} · ৳{(row.provisionalPooledFarePoysha / 100).toFixed(2)} / seat
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={row.status} />
+                  <Link
+                    href={`/passenger/ride/${row.id}`}
+                    className="text-primary hover:underline text-sm font-medium"
+                  >
+                    View
+                  </Link>
+                </div>
+              </div>
+            ))}
 
-              return (
-                <Link
-                  key={ride.id}
-                  href={`/passenger/ride/${ride.id}`}
-                  className="block bg-card rounded-lg p-4 shadow hover:border-primary border border-transparent transition"
+            {nextCursor !== null && (
+              <div className="text-center pt-2">
+                <button
+                  onClick={onLoadMore}
+                  disabled={loadingMore}
+                  className="bg-primary text-white rounded px-4 py-2 text-sm disabled:opacity-50"
                 >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-semibold text-base">
-                        {pickupLabel} → {dropoffLabel}
-                      </p>
-                      <p className="text-xs text-ink-muted mt-1">
-                        {new Date(ride.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span
-                        className={`text-xs px-2.5 py-1 rounded font-semibold inline-block mb-1 ${
-                          ride.status === 'WAITING'
-                            ? 'bg-amber-100 text-amber-800'
-                            : ride.status === 'MATCHED'
-                            ? 'bg-blue-100 text-blue-800'
-                            : ride.status === 'COMPLETED'
-                            ? 'bg-green-100 text-green-800'
-                            : ride.status === 'CANCELLED'
-                            ? 'bg-gray-200 text-gray-700'
-                            : 'bg-purple-100 text-purple-800'
-                        }`}
-                      >
-                        {ride.status}
-                      </span>
-                      <p className="text-sm font-medium">
-                        ৳{(ride.provisionalPooledFarePoysha / 100).toFixed(2)} / seat
-                      </p>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
+                  {loadingMore ? 'Loading more…' : 'Load more'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
