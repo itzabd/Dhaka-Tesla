@@ -26,7 +26,7 @@ Dhaka’s transport grid suffers from severe congestion, arbitrary spot pricing,
 - Sign up / sign in with stateless JWT authentication.
 - Book a ride with real-time client fare preview and fixed corridor presets.
 - Live ride tracking with 3-second adaptive polling and tab-visibility power throttling.
-- Cancel ride requests while `REQUESTED` or `ACCEPTED` with automated cash settlement handling.
+- Cancel ride requests while `WAITING` or `MATCHED` with automated cash settlement handling.
 - View complete ride history with cursor-based pagination and status filtering.
 
 ### Driver
@@ -34,7 +34,7 @@ Dhaka’s transport grid suffers from severe congestion, arbitrary spot pricing,
 - Real-time request inbox showing corridor-compatible passenger requests.
 - Atomic accept into a pool: concurrency-enforced capacity tracking (max 3 seats for Bullet).
 - Full trip lifecycle management: `ACCEPTED` → `ARRIVED` → `IN_TRANSIT` → `COMPLETED`.
-- Emergency pool cancellation before departure reverting passengers cleanly to `REQUESTED`.
+- Emergency pool cancellation before departure reverting passengers cleanly to `WAITING`.
 - Driver shift history displaying completed pools and cumulative earnings in poysha.
 
 ### System
