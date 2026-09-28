@@ -141,7 +141,7 @@ describe('poolService & accept endpoint', () => {
 
   it('first-pool race', async () => {
     const b1 = await bookRide({ token: nusratToken, pickupZone: 'BANANI', dropoffZone: 'MOHAKHALI', requestedSeats: 1 });
-    const b2 = await bookRide({ token: rafiqToken, pickupZone: 'BANANI', dropoffZone: 'GULSHAN_1', requestedSeats: 1 });
+    const b2 = await bookRide({ token: rafiqToken, pickupZone: 'BANANI', dropoffZone: 'MOHAKHALI', requestedSeats: 1 });
 
     const [r1, r2] = await Promise.all([
       accept({ driverToken: jashimToken, rideRequestId: b1.id }),
@@ -161,6 +161,7 @@ describe('poolService & accept endpoint', () => {
     const pools = await pool.query('SELECT * FROM ride_pools WHERE vehicle_id = $1', [jashimVehicleId]);
     expect(pools.rows.length).toBe(1);
     expect(pools.rows[0].occupied_seats).toBe(2);
+    expect(pools.rows[0].farthest_dropoff_zone).toBe('MOHAKHALI');
   });
 
   it('last-seat race', async () => {
