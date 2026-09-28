@@ -1,3 +1,5 @@
+'use client';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { clearToken } from '@/lib/api';
 
@@ -6,7 +8,29 @@ interface DriverSidebarProps {
   variant?: 'sidebar' | 'bottom-nav';
 }
 
+interface StoredUser {
+  fullName: string;
+  role: string;
+}
+
 export function DriverSidebar({ active, variant = 'sidebar' }: DriverSidebarProps) {
+  const [user, setUser] = useState<StoredUser | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem('user');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.fullName === 'string') {
+          setUser(parsed);
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }, []);
+
   // Navigation mapping:
   // Dashboard -> /driver/dashboard
   // Requests  -> /driver/dashboard (placeholder — inbox lives on the dashboard)
@@ -23,67 +47,74 @@ export function DriverSidebar({ active, variant = 'sidebar' }: DriverSidebarProp
 
   if (variant === 'bottom-nav') {
     return (
-      <nav aria-label="Mobile Navigation" className="fixed bottom-0 inset-x-0 bg-white border-t border-[rgba(0,0,0,0.08)] px-4 py-2 flex items-center justify-around z-20 md:hidden">
-        <Link
-          href="/driver/dashboard"
-          className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-semibold rounded-lg transition ${
-            active === 'dashboard'
-              ? 'text-primary bg-primary/10'
-              : 'text-ink-muted hover:text-ink'
-          }`}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <rect width="7" height="7" x="3" y="3" rx="1" />
-            <rect width="7" height="7" x="14" y="3" rx="1" />
-            <rect width="7" height="7" x="14" y="14" rx="1" />
-            <rect width="7" height="7" x="3" y="14" rx="1" />
-          </svg>
-          <span className="text-[10px]">Dashboard</span>
-        </Link>
+      <div className="fixed bottom-0 inset-x-0 bg-white border-t border-[rgba(0,0,0,0.08)] z-20 md:hidden flex flex-col">
+        {user?.fullName && (
+          <div className="text-xs text-ink-muted px-4 py-2 truncate border-b border-[rgba(0,0,0,0.04)] bg-surface/50">
+            {user.fullName}
+          </div>
+        )}
+        <nav aria-label="Mobile Navigation" className="px-4 py-2 flex items-center justify-around">
+          <Link
+            href="/driver/dashboard"
+            className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-semibold rounded-lg transition ${
+              active === 'dashboard'
+                ? 'text-primary bg-primary/10'
+                : 'text-ink-muted hover:text-ink'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <rect width="7" height="7" x="3" y="3" rx="1" />
+              <rect width="7" height="7" x="14" y="3" rx="1" />
+              <rect width="7" height="7" x="14" y="14" rx="1" />
+              <rect width="7" height="7" x="3" y="14" rx="1" />
+            </svg>
+            <span className="text-[10px]">Dashboard</span>
+          </Link>
 
-        <Link
-          href="/driver/dashboard"
-          className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-medium rounded-lg transition ${
-            active === 'requests'
-              ? 'text-primary bg-primary/10 font-semibold'
-              : 'text-ink-muted hover:text-ink'
-          }`}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <span className="text-[10px]">Requests</span>
-        </Link>
+          <Link
+            href="/driver/dashboard"
+            className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-medium rounded-lg transition ${
+              active === 'requests'
+                ? 'text-primary bg-primary/10 font-semibold'
+                : 'text-ink-muted hover:text-ink'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span className="text-[10px]">Requests</span>
+          </Link>
 
-        <Link
-          href="/driver/history"
-          className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-medium rounded-lg transition ${
-            active === 'history'
-              ? 'text-primary bg-primary/10 font-semibold'
-              : 'text-ink-muted hover:text-ink'
-          }`}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-          <span className="text-[10px]">History</span>
-        </Link>
+          <Link
+            href="/driver/history"
+            className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-medium rounded-lg transition ${
+              active === 'history'
+                ? 'text-primary bg-primary/10 font-semibold'
+                : 'text-ink-muted hover:text-ink'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            <span className="text-[10px]">History</span>
+          </Link>
 
-        <button
-          type="button"
-          onClick={handleLogout}
-          aria-label="Log out"
-          className="flex flex-col items-center gap-1 py-1 px-3 text-xs text-ink-muted hover:text-danger-dark transition flex-1"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-          <span className="text-[10px]">Log out</span>
-        </button>
-      </nav>
+          <button
+            type="button"
+            onClick={handleLogout}
+            aria-label="Log out"
+            className="flex flex-col items-center gap-1 py-1 px-3 text-xs text-ink-muted hover:text-danger-dark transition flex-1"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span className="text-[10px]">Log out</span>
+          </button>
+        </nav>
+      </div>
     );
   }
 
@@ -103,6 +134,16 @@ export function DriverSidebar({ active, variant = 'sidebar' }: DriverSidebarProp
             <div className="text-[10px] text-ink-muted font-medium">Driver Terminal</div>
           </div>
         </div>
+
+        {/* User Profile Header (Desktop) */}
+        {user?.fullName && (
+          <div className="px-3 py-2 mb-4 rounded-lg bg-surface/60 border border-[rgba(0,0,0,0.04)]">
+            <div className="text-sm font-medium text-ink truncate">{user.fullName}</div>
+            <div className="text-xs text-ink-muted">
+              {user.role ? (user.role.toUpperCase() === 'DRIVER' ? 'Driver' : 'Passenger') : 'Driver'}
+            </div>
+          </div>
+        )}
 
         {/* Navigation */}
         <nav aria-label="Driver Navigation" className="space-y-1">

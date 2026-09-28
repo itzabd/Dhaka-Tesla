@@ -1,3 +1,5 @@
+'use client';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { clearToken } from '@/lib/api';
 
@@ -7,7 +9,29 @@ interface PassengerSidebarProps {
   variant?: 'sidebar' | 'bottom-nav';
 }
 
+interface StoredUser {
+  fullName: string;
+  role: string;
+}
+
 export function PassengerSidebar({ active, variant = 'sidebar' }: PassengerSidebarProps) {
+  const [user, setUser] = useState<StoredUser | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem('user');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.fullName === 'string') {
+          setUser(parsed);
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }, []);
+
   function handleLogout(): void {
     if (typeof window === 'undefined') return;
     clearToken('PASSENGER');
@@ -16,68 +40,75 @@ export function PassengerSidebar({ active, variant = 'sidebar' }: PassengerSideb
 
   if (variant === 'bottom-nav') {
     return (
-      <nav className="fixed bottom-0 inset-x-0 bg-white border-t border-[rgba(0,0,0,0.08)] px-2 py-1.5 flex items-center justify-around z-20 md:hidden">
-        <Link
-          href="/passenger/book"
-          className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-semibold rounded-lg transition ${
-            active === 'dashboard'
-              ? 'text-primary bg-primary/10'
-              : 'text-ink-muted hover:text-ink'
-          }`}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <rect width="7" height="7" x="3" y="3" rx="1" />
-            <rect width="7" height="7" x="14" y="3" rx="1" />
-            <rect width="7" height="7" x="14" y="14" rx="1" />
-            <rect width="7" height="7" x="3" y="14" rx="1" />
-          </svg>
-          <span className="text-[10px]">Dashboard</span>
-        </Link>
+      <div className="fixed bottom-0 inset-x-0 bg-white border-t border-[rgba(0,0,0,0.08)] z-20 md:hidden flex flex-col">
+        {user?.fullName && (
+          <div className="text-xs text-ink-muted px-4 py-2 truncate border-b border-[rgba(0,0,0,0.04)] bg-surface/50">
+            {user.fullName}
+          </div>
+        )}
+        <nav aria-label="Mobile Navigation" className="px-2 py-1.5 flex items-center justify-around">
+          <Link
+            href="/passenger/book"
+            className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-semibold rounded-lg transition ${
+              active === 'dashboard'
+                ? 'text-primary bg-primary/10'
+                : 'text-ink-muted hover:text-ink'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <rect width="7" height="7" x="3" y="3" rx="1" />
+              <rect width="7" height="7" x="14" y="3" rx="1" />
+              <rect width="7" height="7" x="14" y="14" rx="1" />
+              <rect width="7" height="7" x="3" y="14" rx="1" />
+            </svg>
+            <span className="text-[10px]">Dashboard</span>
+          </Link>
 
-        <Link
-          href="/passenger/book"
-          className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-medium rounded-lg transition ${
-            active === 'requests'
-              ? 'text-primary bg-primary/10 font-semibold'
-              : 'text-ink-muted hover:text-ink'
-          }`}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10" />
-            <path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z" />
-          </svg>
-          <span className="text-[10px]">Requests</span>
-        </Link>
+          <Link
+            href="/passenger/book"
+            className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-medium rounded-lg transition ${
+              active === 'requests'
+                ? 'text-primary bg-primary/10 font-semibold'
+                : 'text-ink-muted hover:text-ink'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" />
+              <path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z" />
+            </svg>
+            <span className="text-[10px]">Requests</span>
+          </Link>
 
-        <Link
-          href="/passenger/history"
-          className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-medium rounded-lg transition ${
-            active === 'history'
-              ? 'text-primary bg-primary/10 font-semibold'
-              : 'text-ink-muted hover:text-ink'
-          }`}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-          <span className="text-[10px]">History</span>
-        </Link>
+          <Link
+            href="/passenger/history"
+            className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-medium rounded-lg transition ${
+              active === 'history'
+                ? 'text-primary bg-primary/10 font-semibold'
+                : 'text-ink-muted hover:text-ink'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            <span className="text-[10px]">History</span>
+          </Link>
 
-        <button
-          type="button"
-          onClick={handleLogout}
-          aria-label="Log out"
-          className="flex flex-col items-center gap-1 py-1 px-3 text-xs text-ink-muted hover:text-danger-dark transition flex-1"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-          <span className="text-[10px]">Log out</span>
-        </button>
-      </nav>
+          <button
+            type="button"
+            onClick={handleLogout}
+            aria-label="Log out"
+            className="flex flex-col items-center gap-1 py-1 px-3 text-xs text-ink-muted hover:text-danger-dark transition flex-1"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span className="text-[10px]">Log out</span>
+          </button>
+        </nav>
+      </div>
     );
   }
 
@@ -97,6 +128,16 @@ export function PassengerSidebar({ active, variant = 'sidebar' }: PassengerSideb
             <div className="text-[10px] text-ink-muted font-medium">Passenger Portal</div>
           </div>
         </div>
+
+        {/* User Profile Header (Desktop) */}
+        {user?.fullName && (
+          <div className="px-3 py-2 mb-4 rounded-lg bg-surface/60 border border-[rgba(0,0,0,0.04)]">
+            <div className="text-sm font-medium text-ink truncate">{user.fullName}</div>
+            <div className="text-xs text-ink-muted">
+              {user.role ? (user.role.toUpperCase() === 'DRIVER' ? 'Driver' : 'Passenger') : 'Passenger'}
+            </div>
+          </div>
+        )}
 
         {/* Navigation */}
         <nav className="space-y-1">

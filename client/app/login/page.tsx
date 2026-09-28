@@ -21,11 +21,17 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiFetch<{ token: string; user: { role: string } }>('/api/auth/login', {
+      const data = await apiFetch<{ token: string; user: { fullName: string; role: string } }>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ phone: targetPhone, password: targetPass }),
       });
       setToken(data.token, data.user.role);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(
+          'user',
+          JSON.stringify({ fullName: data.user.fullName, role: data.user.role })
+        );
+      }
       router.push(data.user.role === 'DRIVER' ? '/driver/dashboard' : '/passenger/book');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
