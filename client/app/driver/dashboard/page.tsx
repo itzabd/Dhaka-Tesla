@@ -236,7 +236,7 @@ export default function DriverDashboardPage() {
             </div>
 
             {toggleError && (
-              <p className="text-sm text-red-600 mt-2 font-medium">
+              <p className="text-sm text-danger-dark mt-2 font-medium">
                 {toggleError}
               </p>
             )}
@@ -312,7 +312,7 @@ export default function DriverDashboardPage() {
           <h2 className="text-xl font-semibold font-serif">Ride Requests Inbox</h2>
 
           {inlineError && (
-            <div className="bg-red-50 text-red-700 p-3 rounded mt-4">
+            <div className="bg-danger/10 text-danger-dark p-3 rounded mt-4">
               {inlineError}
             </div>
           )}

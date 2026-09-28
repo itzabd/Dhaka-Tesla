@@ -145,18 +145,18 @@ export default function DriverPoolDetailPage() {
                 ))}
               </ul>
             </div>
-            {inlineError && <p className="text-red-600 text-sm">{inlineError}</p>}
+            {inlineError && <p className="text-danger-dark text-sm">{inlineError}</p>}
             <div className="flex gap-2 pt-2">
               {pool.status === 'FORMING' && (
                 <>
                   <button onClick={() => onAdvance('ARRIVED')} disabled={actionLoading} className="bg-primary text-white rounded px-4 py-2 disabled:opacity-50">Mark Arrived</button>
-                  <button onClick={onCancelPool} disabled={actionLoading} className="bg-red-600 text-white rounded px-4 py-2 disabled:opacity-50">Cancel Pool</button>
+                  <button onClick={onCancelPool} disabled={actionLoading} className="bg-danger text-white rounded px-4 py-2 disabled:opacity-50">Cancel Pool</button>
                 </>
               )}
               {pool.status === 'ARRIVED' && (
                 <>
                   <button onClick={() => onAdvance('IN_TRANSIT')} disabled={actionLoading} className="bg-primary text-white rounded px-4 py-2 disabled:opacity-50">Start Trip</button>
-                  <button onClick={onCancelPool} disabled={actionLoading} className="bg-red-600 text-white rounded px-4 py-2 disabled:opacity-50">Cancel Pool</button>
+                  <button onClick={onCancelPool} disabled={actionLoading} className="bg-danger text-white rounded px-4 py-2 disabled:opacity-50">Cancel Pool</button>
                 </>
               )}
               {pool.status === 'IN_TRANSIT' && (

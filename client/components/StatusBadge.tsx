@@ -1,9 +1,9 @@
 const COLORS: Record<string, string> = {
-  WAITING: 'bg-yellow-100 text-yellow-800',
+  WAITING: 'bg-warning/10 text-warning-dark',
   MATCHED: 'bg-blue-100 text-blue-800',
   IN_PROGRESS: 'bg-primary/10 text-primary',
   COMPLETED: 'bg-success/10 text-success-dark',
-  CANCELLED: 'bg-red-100 text-red-800',
+  CANCELLED: 'bg-danger/10 text-danger-dark',
   FORMING: 'bg-blue-100 text-blue-800',
   ARRIVED: 'bg-primary/10 text-primary',
   IN_TRANSIT: 'bg-primary/20 text-primary-dark',

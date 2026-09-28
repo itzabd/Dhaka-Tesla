@@ -103,12 +103,12 @@ export default function PassengerRidePage() {
                 <p className="text-sm mt-1">{data.pool.occupiedSeats}/{data.pool.totalCapacity} seats occupied</p>
               </div>
             )}
-            {inlineError && <p className="text-red-600 text-sm">{inlineError}</p>}
+            {inlineError && <p className="text-danger-dark text-sm">{inlineError}</p>}
             {canCancel && (
               <button
                 onClick={onCancel}
                 disabled={actionLoading}
-                className="bg-red-600 text-white rounded px-4 py-2 disabled:opacity-50"
+                className="bg-danger text-white rounded px-4 py-2 disabled:opacity-50"
               >
                 {actionLoading ? 'Cancelling…' : 'Cancel ride'}
               </button>
