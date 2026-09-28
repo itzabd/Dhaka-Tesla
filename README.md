@@ -440,16 +440,33 @@ Comprehensive API specifications are maintained in [docs/api.md](./docs/api.md).
 
 ## 21. AI Usage & Demo Video
 
+## 21. AI Usage & Demo Video
+
 ### AI Tools Used
-- **Antigravity Agentic IDE**: End-to-end full-stack pair programming, test suite verification, and diagnostic tracing.
-- **Claude 3.5 Sonnet**: Architectural validation, concurrency model auditing, and schema design.
-- **Gemini 1.5 Pro**: PRD analysis, corridor graph pathfinding validation, and requirements reconciliation.
 
-### Accepted Suggestion
-Implementing explicit PostgreSQL `SELECT ... FOR UPDATE` row locks directly on the `vehicles` table to serialize pool creation without requiring an external Redis distributed lock manager. Validated with high-concurrency race condition tests.
+* **Antigravity Agentic IDE:** Used for full-stack implementation, code generation, debugging, test execution, and diagnostic tracing during development.
+* **ChatGPT:** Used for PRD analysis, architecture and database design discussions, concurrency and transaction reasoning, implementation planning, and reviewing technical decisions.
+* **DeepSeek:** Used for architecture and design discussions, reviewing proposed solutions, identifying potential issues, and comparing implementation approaches.
 
-### Rejected Suggestion
-Introducing BullMQ and Redis for queue-based request matching. Rejected in accordance with PRD Section 9 to prevent unnecessary infrastructure bloat; native PostgreSQL ACID transactions handle our corridor volumes with sub-millisecond overhead.
+All AI-generated suggestions and code were reviewed, tested, and adapted during development. The final architecture and implementation decisions were made and validated by the developer.
+
+### AI-Assisted Development
+
+AI tools were used as development assistants rather than as autonomous decision-makers. Architecture, database constraints, transaction handling, concurrency control, API behavior, and implementation changes were reviewed against the PRD and tested during development.
+
+### Demo Video
+
+The demo covers:
+
+* Passenger ride request and booking
+* Driver acceptance and pool formation
+* Multi-passenger pooling
+* Capacity and concurrency handling
+* Ride lifecycle management
+* Fare and status tracking
+* Passenger and driver history
+* Key validation and edge cases
+
 
 ### Modified Suggestion
 Initial suggestion proposed a directed graph for corridor stop sequencing. Modified to an undirected connected graph to ensure symmetric return trips between Banani, Mohakhali, and Farmgate.
