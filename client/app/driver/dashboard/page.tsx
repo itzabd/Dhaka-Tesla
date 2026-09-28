@@ -1,9 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { apiFetch, clearToken, uuid, isSessionExpired } from '@/lib/api';
-import { ZONE_LABELS, Zone } from '@/lib/zones';
+import { useRequireAuth } from '@/lib/useRequireAuth';
+import { DriverSidebar } from '@/components/DriverSidebar';
+import { RequestCard } from '@/components/driver/RequestCard';
+import { ActivePoolCard } from '@/components/driver/ActivePoolCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import { LoadingState } from '@/components/LoadingState';
 import { ErrorState } from '@/components/ErrorState';
@@ -57,6 +59,7 @@ interface RequestsResponse {
 }
 
 export default function DriverDashboardPage() {
+  const { isAuthorized } = useRequireAuth();
   const router = useRouter();
   const [current, setCurrent] = useState<CurrentResponse | null>(null);
   const [requests, setRequests] = useState<RequestRow[]>([]);
@@ -162,202 +165,129 @@ export default function DriverDashboardPage() {
     }
   }
 
-  if (loading && !current) {
-    return <LoadingState label="Loading dashboard…" />;
-  }
+  if (!isAuthorized) return <LoadingState label="Checking session…" />;
+  if (loading && !current) return <LoadingState label="Loading dashboard…" />;
+
+  const isOnline = current?.vehicle.isOnline ?? false;
+  const pool = current?.pool;
 
   return (
-    <div className="min-h-screen bg-surface text-ink p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-serif font-bold tracking-tight">Driver Cockpit</h1>
-            <p className="text-sm text-ink-muted">Dhaka Tesla Autonomous Fleet</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/driver/history"
-              className="text-sm font-medium text-primary hover:underline"
-            >
-              Trip History
-            </Link>
-            <button
-              onClick={load}
-              disabled={loading}
-              className="bg-card text-ink border border-surface-alt rounded px-3 py-1.5 text-sm hover:bg-surface-alt shadow-sm"
-            >
-              Refresh
-            </button>
-          </div>
-        </div>
+    <div className="min-h-screen bg-surface text-ink font-sans pb-20 md:pb-0">
+      <DriverSidebar variant="sidebar" active="dashboard" />
 
-        {error && <ErrorState message={error} />}
-
-        {/* Vehicle & Online Status */}
-        {current && (
-          <div className="bg-card rounded-lg p-6 shadow space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-              <div>
-                <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-bold">{current.vehicle.name}</h2>
-                  <span
-                    className={
-                      current.vehicle.isOnline
-                        ? 'bg-success text-white rounded px-2 py-1 text-sm'
-                        : 'bg-zinc-400 text-white rounded px-2 py-1 text-sm'
-                    }
-                  >
-                    {current.vehicle.isOnline ? 'Online' : 'Offline'}
-                  </span>
-                </div>
-                <p className="text-sm text-ink-muted mt-1">
-                  Vehicle Capacity: {current.vehicle.capacity} seats
-                </p>
+      <main className="md:ml-60 p-4 md:p-8">
+        <div className="max-w-[960px] mx-auto space-y-6">
+          {/* Top Strip: Driver Info, Online Toggle & Refresh */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-[rgba(0,0,0,0.08)] gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-extrabold tracking-tight text-ink">
+                  {current?.vehicle ? `${current.vehicle.name} Cockpit` : 'Driver Cockpit'}
+                </h1>
+                <span className="inline-flex items-center gap-1 bg-success/10 text-success text-xs font-semibold px-2 py-0.5 rounded-md">
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path clipRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" fillRule="evenodd" />
+                  </svg>
+                  Verified
+                </span>
               </div>
+              <div className="flex items-center gap-2 mt-1 text-xs text-ink-muted">
+                <span>Vehicle: {current?.vehicle.name ?? 'Autonomous'} · {current?.vehicle.capacity ?? 3} seats</span>
+                <span>•</span>
+                <span className="text-ink-muted">Fixed corridor pooling</span>
+              </div>
+            </div>
 
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={load}
+                disabled={loading}
+                className="px-3.5 py-1.5 rounded-lg border border-[rgba(0,0,0,0.08)] bg-white hover:bg-surface text-xs font-semibold shadow-sm transition"
+              >
+                {loading ? 'Refreshing…' : 'Refresh'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleToggleOnline}
+                disabled={isToggling}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-xs tracking-wider uppercase transition shadow-sm ${
+                  isOnline
+                    ? 'bg-success/10 border border-success/30 text-success hover:bg-success/20'
+                    : 'bg-zinc-100 border border-zinc-300 text-zinc-600 hover:bg-zinc-200'
+                }`}
+              >
+                <span className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-success' : 'bg-zinc-400'}`} />
+                <span>{isToggling ? 'Updating…' : isOnline ? 'Online' : 'Offline'}</span>
+              </button>
+            </div>
+          </div>
+
+          {error && <ErrorState message={error} />}
+
+          {toggleError && (
+            <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between text-amber-800 text-xs font-medium">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-amber-800 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                </svg>
+                <span>{toggleError}</span>
+              </div>
+              <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">Offline Guard</span>
+            </div>
+          )}
+
+          {/* Section: Main Active Pool Card */}
+          <ActivePoolCard pool={pool} />
+
+          {/* Section: Compatible Corridor Requests */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
               <div>
+                <h3 className="text-base font-bold text-ink">Compatible Requests</h3>
+                <p className="text-xs text-ink-muted">Nearby passengers travelling along your designated corridor</p>
+              </div>
+              <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full">
+                {requests.length} Match{requests.length === 1 ? '' : 'es'} Available
+              </span>
+            </div>
+
+            {inlineError && (
+              <div className="bg-danger/10 text-danger-dark p-3 rounded-lg text-xs font-medium">
+                {inlineError}
+              </div>
+            )}
+
+            {!isOnline ? (
+              <div className="bg-surface-alt border border-[rgba(0,0,0,0.08)] rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold text-ink">You are currently offline</div>
+                  <p className="text-[11px] text-ink-muted">Go online to receive pool requests on your route.</p>
+                </div>
                 <button
+                  type="button"
                   onClick={handleToggleOnline}
                   disabled={isToggling}
-                  className={
-                    current.vehicle.isOnline
-                      ? 'bg-zinc-700 hover:bg-zinc-800 text-white rounded px-4 py-2 text-sm font-medium'
-                      : 'bg-primary hover:bg-primary-dark text-white rounded px-4 py-2 text-sm font-medium'
-                  }
+                  className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-lg shadow-sm transition disabled:opacity-50"
                 >
-                  {isToggling
-                    ? 'Updating...'
-                    : current.vehicle.isOnline
-                    ? 'Go Offline'
-                    : 'Go Online'}
+                  Go Online
                 </button>
               </div>
-            </div>
-
-            {toggleError && (
-              <p className="text-sm text-danger-dark mt-2 font-medium">
-                {toggleError}
-              </p>
+            ) : requests.length === 0 ? (
+              <EmptyState message="No eligible requests yet." hint="Toggle online to see incoming rides." />
+            ) : (
+              <div className="space-y-3">
+                {requests.map((r) => (
+                  <RequestCard key={r.id} request={r} onAccept={onAccept} />
+                ))}
+              </div>
             )}
           </div>
-        )}
-
-        {/* Current Pool Card */}
-        <div className="bg-card rounded-lg p-6 shadow space-y-4">
-          <h2 className="text-xl font-semibold font-serif">Current Pool</h2>
-
-          {current?.pool ? (
-            <div className="space-y-4">
-              <div className="flex flex-wrap justify-between items-center gap-2 border-b pb-3">
-                <div className="flex items-center gap-2">
-                  <StatusBadge status={current.pool.status} />
-                  <span className="text-sm text-ink-muted">
-                    {current.pool.occupiedSeats} / {current.pool.totalCapacity} seats occupied
-                  </span>
-                </div>
-                <Link
-                  href={`/driver/pool/${current.pool.id}`}
-                  className="text-primary hover:underline text-sm font-medium"
-                >
-                  View pool
-                </Link>
-              </div>
-
-              <div>
-                <p className="text-sm font-medium text-ink">
-                  Route:{' '}
-                  <span className="font-normal text-ink-muted">
-                    {ZONE_LABELS[current.pool.initialPickupZone as Zone] || current.pool.initialPickupZone} &rarr;{' '}
-                    {ZONE_LABELS[current.pool.farthestDropoffZone as Zone] || current.pool.farthestDropoffZone}
-                  </span>
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-ink-muted">
-                  Manifest Passengers ({current.pool.passengers.length})
-                </h3>
-                <div className="divide-y divide-surface-alt border border-surface-alt rounded">
-                  {current.pool.passengers.map((p) => (
-                    <div
-                      key={p.requestId}
-                      className="p-3 flex justify-between items-center text-sm"
-                    >
-                      <div>
-                        <span className="font-medium text-ink">{p.passengerName}</span>
-                        <span className="text-xs text-ink-muted ml-2">
-                          ({p.seatCount} {p.seatCount === 1 ? 'seat' : 'seats'})
-                        </span>
-                        <div className="text-xs text-ink-muted">
-                          {ZONE_LABELS[p.pickupZone as Zone] || p.pickupZone} &rarr;{' '}
-                          {ZONE_LABELS[p.dropoffZone as Zone] || p.dropoffZone}
-                        </div>
-                      </div>
-                      <div className="font-medium text-ink">
-                        ৳{(p.individualFarePoysha / 100).toFixed(2)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-ink-muted">No active pool.</p>
-          )}
         </div>
+      </main>
 
-        {/* Requests Inbox */}
-        <div className="bg-card rounded-lg p-6 shadow space-y-4">
-          <h2 className="text-xl font-semibold font-serif">Ride Requests Inbox</h2>
-
-          {inlineError && (
-            <div className="bg-danger/10 text-danger-dark p-3 rounded mt-4">
-              {inlineError}
-            </div>
-          )}
-
-          {!current?.vehicle.isOnline ? (
-            <p className="text-sm text-ink-muted">You&apos;re offline.</p>
-          ) : requests.length === 0 ? (
-            <EmptyState message="No eligible requests yet." hint="Toggle online to see incoming rides." />
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {requests.map((r) => (
-                <div
-                  key={r.id}
-                  className="border border-surface-alt rounded-lg p-4 space-y-3 bg-surface-alt/40 flex flex-col justify-between"
-                >
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-start">
-                      <h3 className="font-semibold text-ink">{r.passengerName}</h3>
-                      <span className="text-xs text-ink-muted">
-                        {r.requestedSeats} {r.requestedSeats === 1 ? 'seat' : 'seats'}
-                      </span>
-                    </div>
-                    <p className="text-sm text-ink-muted">
-                      {ZONE_LABELS[r.pickupZone as Zone] || r.pickupZone} &rarr;{' '}
-                      {ZONE_LABELS[r.dropoffZone as Zone] || r.dropoffZone}
-                    </p>
-                    <p className="text-sm font-medium text-primary">
-                      ৳{(r.provisionalPooledFarePoysha / 100).toFixed(2)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <button
-                      onClick={() => onAccept(r.id)}
-                      className="w-full bg-primary hover:bg-primary-dark text-white rounded px-4 py-2 text-sm font-medium"
-                    >
-                      Accept
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      <DriverSidebar variant="bottom-nav" active="dashboard" />
     </div>
   );
 }
