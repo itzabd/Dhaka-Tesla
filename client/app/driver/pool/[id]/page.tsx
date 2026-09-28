@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiFetch, uuid, clearToken, isSessionExpired } from '@/lib/api';
@@ -8,6 +8,7 @@ import { ZONE_LABELS, Zone } from '@/lib/zones';
 import { StatusBadge } from '@/components/StatusBadge';
 import { LoadingState } from '@/components/LoadingState';
 import { ErrorState } from '@/components/ErrorState';
+import { pushToast } from '@/lib/useToast';
 
 interface Passenger {
   requestId: string;
@@ -58,6 +59,17 @@ export default function DriverPoolDetailPage() {
     }
   }, [error, router]);
 
+  const previousCountRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const current = data?.pool?.passengers?.length ?? null;
+    const previous = previousCountRef.current;
+    if (current !== null && previous !== null && current < previous) {
+      pushToast('A passenger cancelled. Occupancy updated.', 'info');
+    }
+    if (current !== null) previousCountRef.current = current;
+  }, [data?.pool?.passengers]);
+
   async function onAdvance(target: 'ARRIVED' | 'IN_TRANSIT' | 'COMPLETED') {
     setInlineError(null);
     setActionLoading(true);
@@ -66,6 +78,7 @@ export default function DriverPoolDetailPage() {
         method: 'PATCH',
         body: JSON.stringify({ status: target }),
       });
+      pushToast(`Trip status: ${target}`, 'success');
       if (target === 'COMPLETED') {
         setFinished(true);
         router.push('/driver/history');
@@ -85,6 +98,7 @@ export default function DriverPoolDetailPage() {
   }
 
   async function onCancelPool() {
+    if (!window.confirm('Cancel this pool? All passengers will return to the waiting queue.')) return;
     setInlineError(null);
     setActionLoading(true);
     try {
@@ -92,6 +106,7 @@ export default function DriverPoolDetailPage() {
         method: 'POST',
         idempotencyKey: uuid(),
       });
+      pushToast('Pool cancelled. Passengers returned to the waiting queue.', 'success');
       setFinished(true);
       router.push('/driver/dashboard');
     } catch (err) {
@@ -100,6 +115,7 @@ export default function DriverPoolDetailPage() {
         if (err.message === 'INVALID_TRANSITION') setInlineError('Cannot cancel pool once trip has started.');
         else if (err.message === 'POOL_NOT_FOUND') setInlineError('Pool not found.');
         else setInlineError(err.message);
+        pushToast(`Cancellation failed: ${err.message}`, 'danger');
       }
     } finally {
       setActionLoading(false);

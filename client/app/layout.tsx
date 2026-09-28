@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { EB_Garamond, Manrope } from 'next/font/google';
 import './globals.css';
+import { Toast } from '@/components/Toast';
 
 const serif = EB_Garamond({ subsets: ['latin'], variable: '--font-serif', display: 'swap' });
 const sans = Manrope({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
@@ -17,7 +18,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${serif.variable} ${sans.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Toast />
+      </body>
     </html>
   );
 }
