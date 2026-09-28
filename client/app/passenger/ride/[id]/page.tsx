@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { apiFetch, uuid, clearToken, isSessionExpired } from '@/lib/api';
 import { usePolling } from '@/lib/usePolling';
 import { ZONE_LABELS, Zone } from '@/lib/zones';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import { PassengerSidebar } from '@/components/PassengerSidebar';
 import { LoadingState } from '@/components/LoadingState';
 import { ErrorState } from '@/components/ErrorState';
@@ -30,6 +31,7 @@ interface RideResponse {
 }
 
 export default function PassengerRidePage() {
+  const { isAuthorized } = useRequireAuth();
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const rideId = params.id;
@@ -69,6 +71,8 @@ export default function PassengerRidePage() {
       setActionLoading(false);
     }
   }
+
+  if (!isAuthorized) return <LoadingState label="Checking session…" />;
 
   // DATA-FIRST RENDERING
   if (data) {
