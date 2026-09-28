@@ -53,12 +53,12 @@ export function DriverSidebar({ active, variant = 'sidebar' }: DriverSidebarProp
             {user.fullName}
           </div>
         )}
-        <nav aria-label="Mobile Navigation" className="px-4 py-2 flex items-center justify-around">
+        <nav aria-label="Mobile Navigation" className="px-2 flex items-center justify-around">
           <Link
             href="/driver/dashboard"
-            className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-semibold rounded-lg transition ${
+            className={`flex flex-col items-center justify-center gap-1 flex-1 py-2 ${
               active === 'dashboard'
-                ? 'text-primary bg-primary/10'
+                ? 'text-primary'
                 : 'text-ink-muted hover:text-ink'
             }`}
           >
@@ -73,9 +73,9 @@ export function DriverSidebar({ active, variant = 'sidebar' }: DriverSidebarProp
 
           <Link
             href="/driver/dashboard"
-            className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-medium rounded-lg transition ${
+            className={`flex flex-col items-center justify-center gap-1 flex-1 py-2 ${
               active === 'requests'
-                ? 'text-primary bg-primary/10 font-semibold'
+                ? 'text-primary'
                 : 'text-ink-muted hover:text-ink'
             }`}
           >
@@ -87,9 +87,9 @@ export function DriverSidebar({ active, variant = 'sidebar' }: DriverSidebarProp
 
           <Link
             href="/driver/history"
-            className={`flex flex-col items-center gap-1 py-1 px-3 text-xs font-medium rounded-lg transition ${
+            className={`flex flex-col items-center justify-center gap-1 flex-1 py-2 ${
               active === 'history'
-                ? 'text-primary bg-primary/10 font-semibold'
+                ? 'text-primary'
                 : 'text-ink-muted hover:text-ink'
             }`}
           >
@@ -104,7 +104,7 @@ export function DriverSidebar({ active, variant = 'sidebar' }: DriverSidebarProp
             type="button"
             onClick={handleLogout}
             aria-label="Log out"
-            className="flex flex-col items-center gap-1 py-1 px-3 text-xs text-ink-muted hover:text-danger-dark transition flex-1"
+            className="flex flex-col items-center justify-center gap-1 flex-1 py-2 text-ink-muted hover:text-danger-dark transition"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
