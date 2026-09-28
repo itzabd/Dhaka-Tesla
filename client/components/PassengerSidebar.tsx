@@ -1,16 +1,17 @@
 import Link from 'next/link';
 
+// Account removed in Phase 10 Prompt 3 — replaced by Log out action.
 interface PassengerSidebarProps {
-  active: 'dashboard' | 'requests' | 'history' | 'account';
+  active: 'dashboard' | 'requests' | 'history';
   variant?: 'sidebar' | 'bottom-nav';
 }
 
 export function PassengerSidebar({ active, variant = 'sidebar' }: PassengerSidebarProps) {
-  // Navigation mapping:
-  // Dashboard -> /passenger/book
-  // Requests  -> /passenger/book (In the MVP, Requests points to /passenger/book as there is no separate requests view)
-  // History   -> /passenger/history
-  // Account   -> disabled <span> (Coming soon in MVP)
+  function handleLogout(): void {
+    if (typeof window === 'undefined') return;
+    window.localStorage.removeItem('token');
+    window.location.href = '/login';
+  }
 
   if (variant === 'bottom-nav') {
     return (
@@ -62,21 +63,24 @@ export function PassengerSidebar({ active, variant = 'sidebar' }: PassengerSideb
           <span className="text-[10px]">History</span>
         </Link>
 
-        <span
-          className="flex flex-col items-center gap-1 py-1 px-3 text-xs text-ink-muted opacity-50 cursor-not-allowed"
-          title="Coming soon"
+        <button
+          type="button"
+          onClick={handleLogout}
+          aria-label="Log out"
+          className="flex flex-col items-center gap-1 py-1 px-3 text-xs text-ink-muted hover:text-danger-dark transition flex-1"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
           </svg>
-          <span className="text-[10px]">Account</span>
-        </span>
+          <span className="text-[10px]">Log out</span>
+        </button>
       </nav>
     );
   }
 
-  // Sidebar variant: fixed left column, w-60 (240px matching Stitch w-[240px]), hidden md:flex
+  // Desktop sidebar (variant='sidebar')
   return (
     <aside className="fixed top-0 bottom-0 left-0 w-60 z-20 flex-shrink-0 bg-white border-r border-[rgba(0,0,0,0.06)] hidden md:flex flex-col justify-between p-4">
       <div>
@@ -93,7 +97,7 @@ export function PassengerSidebar({ active, variant = 'sidebar' }: PassengerSideb
           </div>
         </div>
 
-        {/* 4 Items Navigation */}
+        {/* Navigation */}
         <nav className="space-y-1">
           <Link
             href="/passenger/book"
@@ -150,24 +154,29 @@ export function PassengerSidebar({ active, variant = 'sidebar' }: PassengerSideb
             </div>
             {active === 'history' && <span className="w-1.5 h-4 rounded-full bg-primary" />}
           </Link>
-
-          <span
-            className="flex items-center gap-3 px-3 py-2.5 text-xs text-ink-muted opacity-50 cursor-not-allowed"
-            title="Coming soon"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-            <span>Account</span>
-          </span>
         </nav>
       </div>
 
-      {/* Sidebar Footer */}
-      <div className="p-3 bg-surface-alt rounded-lg border border-[rgba(0,0,0,0.05)]">
-        <div className="text-[11px] font-semibold text-ink">Corridor Transit</div>
-        <div className="text-[10px] text-ink-muted mt-0.5">Fixed corridor electric pooling</div>
+      {/* Bottom Area: Logout & Footer */}
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={handleLogout}
+          aria-label="Log out"
+          className="flex items-center gap-3 px-4 py-3 text-danger-dark hover:bg-danger/10 rounded-md transition-colors w-full text-left text-xs font-semibold"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          <span>Log out</span>
+        </button>
+
+        <div className="p-3 bg-surface-alt rounded-lg border border-[rgba(0,0,0,0.05)]">
+          <div className="text-[11px] font-semibold text-ink">Corridor Transit</div>
+          <div className="text-[10px] text-ink-muted mt-0.5">Fixed corridor electric pooling</div>
+        </div>
       </div>
     </aside>
   );

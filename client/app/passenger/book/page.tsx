@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import { apiFetch, uuid, clearToken, isSessionExpired } from '@/lib/api';
 import { ZONES, ZONE_LABELS, Zone } from '@/lib/zones';
 import { previewFare, BASE_FARE_POYSHA, PER_KM_POYSHA } from '@/lib/fare';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import { PassengerSidebar } from '@/components/PassengerSidebar';
+import { LoadingState } from '@/components/LoadingState';
 import { ErrorState } from '@/components/ErrorState';
 
 interface BookResponse {
@@ -26,6 +28,7 @@ const PRESET_CORRIDORS: Array<{ label: string; pickup: Zone; dropoff: Zone }> = 
 ];
 
 export default function BookRidePage() {
+  const { isAuthorized } = useRequireAuth();
   const router = useRouter();
   const [pickupZone, setPickupZone] = useState<Zone>('BANANI');
   const [dropoffZone, setDropoffZone] = useState<Zone>('MOHAKHALI');
@@ -73,6 +76,8 @@ export default function BookRidePage() {
   const distancePoysha = distanceKm * PER_KM_POYSHA;
   const subtotalPoysha = soloBasePoysha + distancePoysha;
   const discountPoysha = Math.floor(subtotalPoysha * 0.20);
+
+  if (!isAuthorized) return <LoadingState label="Checking session…" />;
 
   return (
     <div className="min-h-screen bg-surface text-ink font-sans pb-20 md:pb-0">
