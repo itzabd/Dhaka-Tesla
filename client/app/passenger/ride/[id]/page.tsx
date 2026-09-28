@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiFetch, uuid, clearToken, isSessionExpired } from '@/lib/api';
@@ -9,6 +9,7 @@ import { useRequireAuth } from '@/lib/useRequireAuth';
 import { PassengerSidebar } from '@/components/PassengerSidebar';
 import { LoadingState } from '@/components/LoadingState';
 import { ErrorState } from '@/components/ErrorState';
+import { pushToast } from '@/lib/useToast';
 
 interface RideResponse {
   id: string;
@@ -50,11 +51,24 @@ export default function PassengerRidePage() {
     }
   }, [error, router]);
 
+  const previousStatusRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const current = data?.status;
+    const previous = previousStatusRef.current;
+    if (current === 'CANCELLED' && previous && previous !== 'CANCELLED') {
+      pushToast('Your ride was cancelled by the driver.', 'warning');
+    }
+    if (current) previousStatusRef.current = current;
+  }, [data?.status]);
+
   async function onCancel() {
+    if (!window.confirm('Cancel this ride? This cannot be undone.')) return;
     setInlineError(null);
     setActionLoading(true);
     try {
       await apiFetch(`/api/rides/${rideId}/cancel`, { method: 'POST', idempotencyKey: uuid() });
+      pushToast('Ride cancelled. No refund — cash payment.', 'success');
       await refresh();
     } catch (err) {
       if (isSessionExpired(err)) {
@@ -66,6 +80,7 @@ export default function PassengerRidePage() {
         if (err.message === 'INVALID_TRANSITION') setInlineError('Cannot cancel once the driver has arrived.');
         else if (err.message === 'ALREADY_CANCELLED') setInlineError('This ride is already cancelled.');
         else setInlineError(err.message);
+        pushToast(`Cancellation failed: ${err.message}`, 'danger');
       }
     } finally {
       setActionLoading(false);
