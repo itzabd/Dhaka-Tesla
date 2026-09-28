@@ -56,6 +56,7 @@ export default function BookRidePage() {
         body: JSON.stringify({ pickupZone, dropoffZone, requestedSeats }),
       });
       setBookedRide(data);
+      router.push(`/passenger/ride/${data.id}`);
     } catch (err) {
       if (isSessionExpired(err)) {
         clearToken();

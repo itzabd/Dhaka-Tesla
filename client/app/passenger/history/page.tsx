@@ -25,7 +25,7 @@ interface HistoryResponse {
   pagination: { nextCursor: string | null; hasMore: boolean };
 }
 
-type FilterType = 'ALL' | 'COMPLETED' | 'CANCELLED';
+type FilterType = 'ALL' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 
 export default function RideHistoryPage() {
   const { isAuthorized } = useRequireAuth();
@@ -82,6 +82,9 @@ export default function RideHistoryPage() {
 
   // Filter rows client-side
   const filteredRows = useMemo(() => {
+    if (filter === 'ACTIVE') {
+      return rows.filter((r) => ['WAITING', 'MATCHED', 'IN_PROGRESS'].includes(r.status));
+    }
     if (filter === 'COMPLETED') return rows.filter((r) => r.status === 'COMPLETED');
     if (filter === 'CANCELLED') return rows.filter((r) => r.status === 'CANCELLED');
     return rows;
@@ -90,12 +93,13 @@ export default function RideHistoryPage() {
   // Aggregate stats across currently loaded rows
   const stats = useMemo(() => {
     const totalCount = rows.length;
+    const activeCount = rows.filter((r) => ['WAITING', 'MATCHED', 'IN_PROGRESS'].includes(r.status)).length;
     const completedCount = rows.filter((r) => r.status === 'COMPLETED').length;
     const cancelledCount = rows.filter((r) => r.status === 'CANCELLED').length;
     const totalPoysha = rows
       .filter((r) => r.status === 'COMPLETED')
       .reduce((sum, r) => sum + r.provisionalPooledFarePoysha, 0);
-    return { totalCount, completedCount, cancelledCount, totalPoysha };
+    return { totalCount, activeCount, completedCount, cancelledCount, totalPoysha };
   }, [rows]);
 
   if (!isAuthorized) return <LoadingState label="Checking session…" />;
@@ -163,6 +167,17 @@ export default function RideHistoryPage() {
                 }`}
               >
                 All rides ({stats.totalCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilter('ACTIVE')}
+                className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${
+                  filter === 'ACTIVE'
+                    ? 'bg-primary text-white font-bold shadow-sm'
+                    : 'bg-card border border-[rgba(0,0,0,0.08)] text-ink-muted hover:text-ink'
+                }`}
+              >
+                Active / In Progress ({stats.activeCount})
               </button>
               <button
                 type="button"
