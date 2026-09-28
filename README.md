@@ -419,7 +419,7 @@ Comprehensive API specifications are maintained in [docs/api.md](./docs/api.md).
 
 ## 19. Known Limitations
 
-- **No Request Expiration TTL**: Waiting passenger requests remain active until accepted or manually cancelled; background cron janitor is deferred to Phase 13.
+- **No Request Expiration TTL**: Waiting passenger requests remain active until accepted or manually cancelled; Automated data cleanup will be introduced in a later release cycle.
 - **Flat Multi-Seat Multiplier**: Multiple seats booked under a single request pay `seatCount × individualPooledFare` without sub-tiered bulk discounting.
 - **Simplified Cash Settlement**: Financial processing assumes physical cash handover at destination; digital escrow wallets are out of MVP scope.
 - **Manual Request Refresh**: The driver request inbox updates on page view or user action rather than auto-polling to minimize server load.
@@ -437,8 +437,6 @@ Comprehensive API specifications are maintained in [docs/api.md](./docs/api.md).
 - **Driver Earnings Analytics**: Weekly shift summaries, fuel/charging cost tracking, and payout reporting.
 
 ---
-
-## 21. AI Usage & Demo Video
 
 ## 21. AI Usage & Demo Video
 
@@ -466,11 +464,5 @@ The demo covers:
 * Fare and status tracking
 * Passenger and driver history
 * Key validation and edge cases
-
-
-### Modified Suggestion
-Initial suggestion proposed a directed graph for corridor stop sequencing. Modified to an undirected connected graph to ensure symmetric return trips between Banani, Mohakhali, and Farmgate.
-
-### Demo Video
 Walkthrough of passenger booking, atomic driver pool acceptance, and multi-tab lifecycle:  
 [Dhaka Tesla Pool Demo Video](https://dhaka-tesla-phi.vercel.app)
