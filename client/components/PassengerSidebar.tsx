@@ -40,10 +40,16 @@ export function PassengerSidebar({ active, variant = 'sidebar' }: PassengerSideb
 
   if (variant === 'bottom-nav') {
     return (
-      <div className="fixed bottom-0 inset-x-0 bg-white border-t border-[rgba(0,0,0,0.08)] z-20 md:hidden flex flex-col">
+      <div className="fixed bottom-0 inset-x-0 bg-white border-t border-[rgba(0,0,0,0.08)] z-20 md:hidden flex flex-col shadow-lg">
         {user?.fullName && (
-          <div className="text-xs text-ink-muted px-4 py-2 truncate border-b border-[rgba(0,0,0,0.04)] bg-surface/50">
-            {user.fullName}
+          <div className="px-4 py-2 bg-zinc-50 border-b border-[rgba(0,0,0,0.06)] flex items-center justify-between">
+            <div className="flex items-center gap-2 truncate">
+              <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+              <span className="text-xs font-bold text-ink truncate">{user.fullName}</span>
+            </div>
+            <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 flex-shrink-0">
+              {user.role ? (user.role.toUpperCase() === 'DRIVER' ? 'Driver' : 'Passenger') : 'Passenger'}
+            </span>
           </div>
         )}
         <nav aria-label="Mobile Navigation" className="px-2 flex items-center justify-around">
