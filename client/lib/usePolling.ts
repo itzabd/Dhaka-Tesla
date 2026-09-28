@@ -29,9 +29,33 @@ export function usePolling<T>(
   };
 
   useEffect(() => {
+    // Immediate initial fetch
     load();
-    const timer = setInterval(load, intervalMs);
-    return () => clearInterval(timer);
+
+    // Poll periodically, but pause when the tab/window is in the background to prevent lag and CPU/network saturation
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+      load();
+    }, intervalMs);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        load();
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    return () => {
+      clearInterval(timer);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intervalMs]);
 

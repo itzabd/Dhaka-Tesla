@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { clearToken } from '@/lib/api';
 
 interface DriverSidebarProps {
   active: 'dashboard' | 'requests' | 'history';
@@ -16,7 +17,7 @@ export function DriverSidebar({ active, variant = 'sidebar' }: DriverSidebarProp
 
   function handleLogout(): void {
     if (typeof window === 'undefined') return;
-    window.localStorage.removeItem('token');
+    clearToken('DRIVER');
     window.location.href = '/login';
   }
 

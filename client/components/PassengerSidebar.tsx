@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { clearToken } from '@/lib/api';
 
 // Account removed in Phase 10 Prompt 3 — replaced by Log out action.
 interface PassengerSidebarProps {
@@ -9,7 +10,7 @@ interface PassengerSidebarProps {
 export function PassengerSidebar({ active, variant = 'sidebar' }: PassengerSidebarProps) {
   function handleLogout(): void {
     if (typeof window === 'undefined') return;
-    window.localStorage.removeItem('token');
+    clearToken('PASSENGER');
     window.location.href = '/login';
   }
 

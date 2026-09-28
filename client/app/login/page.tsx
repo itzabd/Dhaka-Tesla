@@ -25,7 +25,7 @@ export default function LoginPage() {
         method: 'POST',
         body: JSON.stringify({ phone: targetPhone, password: targetPass }),
       });
-      setToken(data.token);
+      setToken(data.token, data.user.role);
       router.push(data.user.role === 'DRIVER' ? '/driver/dashboard' : '/passenger/book');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');

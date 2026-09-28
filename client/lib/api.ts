@@ -11,17 +11,54 @@ export class ApiError extends Error {
   }
 }
 
-export function getToken(): string | null {
+export function getRoleFromLocation(): 'DRIVER' | 'PASSENGER' | null {
   if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem('token');
+  const path = window.location.pathname;
+  if (path.startsWith('/driver')) return 'DRIVER';
+  if (path.startsWith('/passenger')) return 'PASSENGER';
+  return null;
 }
 
-export function setToken(token: string): void {
+export function getToken(preferredRole?: 'DRIVER' | 'PASSENGER'): string | null {
+  if (typeof window === 'undefined') return null;
+  const role = preferredRole || getRoleFromLocation();
+  if (role === 'DRIVER') {
+    return window.localStorage.getItem('token_driver') || window.localStorage.getItem('token');
+  }
+  if (role === 'PASSENGER') {
+    return window.localStorage.getItem('token_passenger') || window.localStorage.getItem('token');
+  }
+  return (
+    window.localStorage.getItem('token') ||
+    window.localStorage.getItem('token_passenger') ||
+    window.localStorage.getItem('token_driver')
+  );
+}
+
+export function setToken(token: string, role?: string): void {
+  if (typeof window === 'undefined') return;
+  const normalizedRole = role ? role.toUpperCase() : getRoleFromLocation();
+  if (normalizedRole === 'DRIVER') {
+    window.localStorage.setItem('token_driver', token);
+  } else if (normalizedRole === 'PASSENGER') {
+    window.localStorage.setItem('token_passenger', token);
+  }
+  // Also store default token for backward compatibility
   window.localStorage.setItem('token', token);
 }
 
-export function clearToken(): void {
-  window.localStorage.removeItem('token');
+export function clearToken(role?: 'DRIVER' | 'PASSENGER'): void {
+  if (typeof window === 'undefined') return;
+  const targetRole = role || getRoleFromLocation();
+  if (targetRole === 'DRIVER') {
+    window.localStorage.removeItem('token_driver');
+  } else if (targetRole === 'PASSENGER') {
+    window.localStorage.removeItem('token_passenger');
+  } else {
+    window.localStorage.removeItem('token_driver');
+    window.localStorage.removeItem('token_passenger');
+    window.localStorage.removeItem('token');
+  }
 }
 
 export async function apiFetch<T>(

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { apiFetch, uuid, clearToken, isSessionExpired } from '@/lib/api';
@@ -21,6 +21,13 @@ interface BookResponse {
   };
 }
 
+interface ActiveRideSummary {
+  id: string;
+  pickupZone: string;
+  dropoffZone: string;
+  status: string;
+}
+
 const PRESET_CORRIDORS: Array<{ label: string; pickup: Zone; dropoff: Zone }> = [
   { label: 'Banani → Mohakhali', pickup: 'BANANI', dropoff: 'MOHAKHALI' },
   { label: 'Banani → Gulshan 1', pickup: 'BANANI', dropoff: 'GULSHAN_1' },
@@ -36,6 +43,27 @@ export default function BookRidePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bookedRide, setBookedRide] = useState<BookResponse | null>(null);
+  const [activeRide, setActiveRide] = useState<ActiveRideSummary | null>(null);
+
+  // If passenger already has an active ride in progress, check on mount
+  useEffect(() => {
+    if (!isAuthorized) return;
+    let mounted = true;
+    apiFetch<{ data: ActiveRideSummary[] }>('/api/rides/history?limit=5')
+      .then((res) => {
+        if (!mounted || !res.data) return;
+        const current = res.data.find((r) =>
+          ['REQUESTED', 'ACCEPTED', 'ARRIVED', 'IN_TRANSIT'].includes(r.status)
+        );
+        if (current) {
+          setActiveRide(current);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [isAuthorized]);
 
   // Compute live client-side preview fare
   const fareCalc = previewFare({
@@ -97,6 +125,36 @@ export default function BookRidePage() {
               SHARED CORRIDOR POOLING
             </div>
           </div>
+
+          {/* Active Ride In-Progress Banner */}
+          {activeRide && (
+            <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+              <div className="flex items-center gap-3">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                </span>
+                <div>
+                  <div className="text-xs font-bold text-ink">
+                    Active Ride in Progress ({ZONE_LABELS[activeRide.pickupZone as Zone] || activeRide.pickupZone} → {ZONE_LABELS[activeRide.dropoffZone as Zone] || activeRide.dropoffZone})
+                  </div>
+                  <div className="text-[11px] text-ink-muted">
+                    Status: <span className="font-semibold text-primary">{activeRide.status}</span>
+                  </div>
+                </div>
+              </div>
+              <Link
+                href={`/passenger/ride/${activeRide.id}`}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary-hover transition shadow-sm w-fit"
+              >
+                <span>View Live Ride</span>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
+          )}
 
           {/* Quick Presets */}
           <div>
