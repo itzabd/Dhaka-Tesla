@@ -148,6 +148,13 @@ describe('poolService & accept endpoint', () => {
       accept({ driverToken: jashimToken, rideRequestId: b2.id }),
     ]);
 
+    if (r1.status !== 200) {
+      console.error('[RACE-DIAG] R1 failed:', r1.status, JSON.stringify(r1.body));
+    }
+    if (r2.status !== 200) {
+      console.error('[RACE-DIAG] R2 failed:', r2.status, JSON.stringify(r2.body));
+    }
+
     expect(r1.status).toBe(200);
     expect(r2.status).toBe(200);
 
@@ -169,6 +176,13 @@ describe('poolService & accept endpoint', () => {
       accept({ driverToken: jashimToken, rideRequestId: b3.id }),
       accept({ driverToken: jashimToken, rideRequestId: b4.id }),
     ]);
+
+    if (r3.status !== 200 && r3.status !== 409) {
+      console.error('[RACE-DIAG] R3 failed:', r3.status, JSON.stringify(r3.body));
+    }
+    if (r4.status !== 200 && r4.status !== 409) {
+      console.error('[RACE-DIAG] R4 failed:', r4.status, JSON.stringify(r4.body));
+    }
 
     const statuses = [r3.status, r4.status].sort();
     expect(statuses).toEqual([200, 409]);
