@@ -11,65 +11,30 @@ export class ApiError extends Error {
   }
 }
 
-export function getRoleFromLocation(): 'DRIVER' | 'PASSENGER' | null {
+export type AuthRole = 'passenger' | 'driver';
+
+export function getToken(role: AuthRole = 'passenger'): string | null {
   if (typeof window === 'undefined') return null;
-  const path = window.location.pathname;
-  if (path.startsWith('/driver')) return 'DRIVER';
-  if (path.startsWith('/passenger')) return 'PASSENGER';
-  return null;
+  return window.localStorage.getItem(`token_${role}`);
 }
 
-export function getToken(preferredRole?: 'DRIVER' | 'PASSENGER'): string | null {
-  if (typeof window === 'undefined') return null;
-  const role = preferredRole || getRoleFromLocation();
-  if (role === 'DRIVER') {
-    return window.localStorage.getItem('token_driver') || window.localStorage.getItem('token');
-  }
-  if (role === 'PASSENGER') {
-    return window.localStorage.getItem('token_passenger') || window.localStorage.getItem('token');
-  }
-  return (
-    window.localStorage.getItem('token') ||
-    window.localStorage.getItem('token_passenger') ||
-    window.localStorage.getItem('token_driver')
-  );
+export function setToken(token: string, role: AuthRole = 'passenger'): void {
+  window.localStorage.setItem(`token_${role}`, token);
 }
 
-export function setToken(token: string, role?: string): void {
-  if (typeof window === 'undefined') return;
-  const normalizedRole = role ? role.toUpperCase() : getRoleFromLocation();
-  if (normalizedRole === 'DRIVER') {
-    window.localStorage.setItem('token_driver', token);
-  } else if (normalizedRole === 'PASSENGER') {
-    window.localStorage.setItem('token_passenger', token);
-  }
-  // Also store default token for backward compatibility
-  window.localStorage.setItem('token', token);
-}
-
-export function clearToken(role?: 'DRIVER' | 'PASSENGER'): void {
-  if (typeof window === 'undefined') return;
-  const targetRole = role || getRoleFromLocation();
-  if (targetRole === 'DRIVER') {
-    window.localStorage.removeItem('token_driver');
-  } else if (targetRole === 'PASSENGER') {
-    window.localStorage.removeItem('token_passenger');
-  } else {
-    window.localStorage.removeItem('token_driver');
-    window.localStorage.removeItem('token_passenger');
-    window.localStorage.removeItem('token');
-  }
+export function clearToken(role: AuthRole = 'passenger'): void {
+  window.localStorage.removeItem(`token_${role}`);
 }
 
 export async function apiFetch<T>(
   path: string,
-  options: RequestInit & { idempotencyKey?: string } = {}
+  options: RequestInit & { idempotencyKey?: string; role?: AuthRole } = {}
 ): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> | undefined),
   };
-  const token = getToken();
+  const token = getToken(options.role ?? 'passenger');
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
 
