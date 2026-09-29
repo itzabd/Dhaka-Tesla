@@ -127,7 +127,7 @@ export default function RideHistoryPage() {
           </div>
 
           {/* Stats Summary Strip (Across Loaded Trips) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-card border border-[rgba(0,0,0,0.06)] rounded-xl p-5 shadow-sm">
               <span className="text-xs font-medium text-ink-muted uppercase tracking-wider block">
                 Loaded trips
@@ -142,14 +142,6 @@ export default function RideHistoryPage() {
               </span>
               <span className="text-xl font-extrabold text-primary mt-1 block tabular-nums">
                 ৳{(stats.totalPoysha / 100).toFixed(2)}
-              </span>
-            </div>
-            <div className="bg-card border border-[rgba(0,0,0,0.06)] rounded-xl p-5 shadow-sm">
-              <span className="text-xs font-medium text-ink-muted uppercase tracking-wider block">
-                Fixed corridor route
-              </span>
-              <span className="text-sm font-bold text-ink mt-1.5 block">
-                Banani — Mohakhali Line
               </span>
             </div>
           </div>
