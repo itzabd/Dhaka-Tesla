@@ -59,7 +59,6 @@ Dhaka’s transport grid suffers from severe congestion, arbitrary spot pricing,
 ### Driver Dashboard
 ![Driver dashboard](./docs/screenshots/driver-dashboard.png)
 
-> *Note: Visual screenshots are captured manually from the live application. Drop production image files into `docs/screenshots/` to replace the placeholders.*
 
 ---
 
