@@ -34,7 +34,7 @@ export function PassengerSidebar({ active, variant = 'sidebar' }: PassengerSideb
 
   function handleLogout(): void {
     if (typeof window === 'undefined') return;
-    clearToken('PASSENGER');
+    clearToken('passenger');
     window.location.href = '/login';
   }
 

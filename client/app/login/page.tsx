@@ -25,7 +25,8 @@ export default function LoginPage() {
         method: 'POST',
         body: JSON.stringify({ phone: targetPhone, password: targetPass }),
       });
-      setToken(data.token, data.user.role);
+      const userRole = data.user.role === 'DRIVER' ? 'driver' : 'passenger';
+      setToken(data.token, userRole);
       if (typeof window !== 'undefined') {
         window.localStorage.setItem(
           'user',

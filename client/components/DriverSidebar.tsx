@@ -41,7 +41,7 @@ export function DriverSidebar({ active, variant = 'sidebar' }: DriverSidebarProp
 
   function handleLogout(): void {
     if (typeof window === 'undefined') return;
-    clearToken('DRIVER');
+    clearToken('driver');
     window.location.href = '/login';
   }
 
