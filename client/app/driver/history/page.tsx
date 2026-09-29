@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiFetch, clearToken, isSessionExpired } from '@/lib/api';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import { ZONE_LABELS, Zone } from '@/lib/zones';
 import { StatusBadge } from '@/components/StatusBadge';
 import { LoadingState } from '@/components/LoadingState';
@@ -30,6 +31,7 @@ interface HistoryResponse {
 }
 
 export default function DriverHistoryPage() {
+  const { isAuthorized } = useRequireAuth('driver');
   const router = useRouter();
   const [rows, setRows] = useState<HistoryRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -41,12 +43,12 @@ export default function DriverHistoryPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await apiFetch<HistoryResponse>('/api/driver/history');
+      const res = await apiFetch<HistoryResponse>('/api/driver/history', { role: 'driver' });
       setRows(res.data || []);
       setNextCursor(res.pagination.nextCursor);
     } catch (err) {
       if (isSessionExpired(err)) {
-        clearToken();
+        clearToken('driver');
         router.push('/login');
         return;
       }
@@ -65,13 +67,14 @@ export default function DriverHistoryPage() {
     setLoadingMore(true);
     try {
       const res = await apiFetch<HistoryResponse>(
-        `/api/driver/history?cursor=${encodeURIComponent(nextCursor)}`
+        `/api/driver/history?cursor=${encodeURIComponent(nextCursor)}`,
+        { role: 'driver' }
       );
       setRows((prev) => [...prev, ...(res.data || [])]);
       setNextCursor(res.pagination.nextCursor);
     } catch (err) {
       if (isSessionExpired(err)) {
-        clearToken();
+        clearToken('driver');
         router.push('/login');
         return;
       }
@@ -86,6 +89,7 @@ export default function DriverHistoryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  if (!isAuthorized) return <LoadingState label="Checking session…" />;
   if (loading) return <LoadingState label="Loading trips…" />;
   if (error) return <ErrorState message={error} backHref="/driver/dashboard" backLabel="Back to dashboard" />;
 

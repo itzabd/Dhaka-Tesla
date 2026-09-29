@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { apiFetch, uuid, clearToken, isSessionExpired } from '@/lib/api';
 import { usePolling } from '@/lib/usePolling';
 import { ZONE_LABELS, Zone } from '@/lib/zones';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import { StatusBadge } from '@/components/StatusBadge';
 import { LoadingState } from '@/components/LoadingState';
 import { ErrorState } from '@/components/ErrorState';
@@ -39,6 +40,7 @@ interface VehicleInfo {
 interface CurrentResponse { vehicle: VehicleInfo; pool: Pool | null; }
 
 export default function DriverPoolDetailPage() {
+  const { isAuthorized } = useRequireAuth('driver');
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const poolId = params.id;
@@ -50,13 +52,13 @@ export default function DriverPoolDetailPage() {
   const [finished, setFinished] = useState(false);
 
   const { data, error, loading, refresh } = usePolling<CurrentResponse>(
-    () => apiFetch<CurrentResponse>('/api/driver/pools/current'),
+    () => apiFetch<CurrentResponse>('/api/driver/pools/current', { role: 'driver' }),
     finished ? 60_000 : 3_000
   );
 
   useEffect(() => {
     if (isSessionExpired(error)) {
-      clearToken();
+      clearToken('driver');
       router.push('/login');
     }
   }, [error, router]);
@@ -79,6 +81,7 @@ export default function DriverPoolDetailPage() {
       await apiFetch(`/api/driver/pools/${poolId}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: target }),
+        role: 'driver',
       });
       pushToast(`Trip status: ${target}`, 'success');
       if (target === 'COMPLETED') {
@@ -88,7 +91,7 @@ export default function DriverPoolDetailPage() {
       }
       await refresh();
     } catch (err) {
-      if (isSessionExpired(err)) { clearToken(); router.push('/login'); return; }
+      if (isSessionExpired(err)) { clearToken('driver'); router.push('/login'); return; }
       if (err instanceof Error) {
         if (err.message === 'INVALID_TRANSITION') setInlineError('This action is not available in the current state.');
         else if (err.message === 'POOL_NOT_FOUND') setInlineError('Pool not found.');
@@ -111,12 +114,13 @@ export default function DriverPoolDetailPage() {
       await apiFetch(`/api/driver/pools/${poolId}/cancel`, {
         method: 'POST',
         idempotencyKey: uuid(),
+        role: 'driver',
       });
       pushToast('Pool cancelled. Passengers returned to the waiting queue.', 'success');
       setFinished(true);
       router.push('/driver/dashboard');
     } catch (err) {
-      if (isSessionExpired(err)) { clearToken(); router.push('/login'); return; }
+      if (isSessionExpired(err)) { clearToken('driver'); router.push('/login'); return; }
       if (err instanceof Error) {
         if (err.message === 'INVALID_TRANSITION') setInlineError('Cannot cancel pool once trip has started.');
         else if (err.message === 'POOL_NOT_FOUND') setInlineError('Pool not found.');
@@ -129,6 +133,7 @@ export default function DriverPoolDetailPage() {
   }
 
   // DATA-FIRST RENDERING
+  if (!isAuthorized) return <LoadingState label="Checking session…" />;
   if (data) {
     const pool = data.pool;
     if (!pool || pool.id !== poolId) {

@@ -28,7 +28,7 @@ interface HistoryResponse {
 type FilterType = 'ALL' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 
 export default function RideHistoryPage() {
-  const { isAuthorized } = useRequireAuth();
+  const { isAuthorized } = useRequireAuth('passenger');
   const router = useRouter();
   const [rows, setRows] = useState<RideRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -40,12 +40,12 @@ export default function RideHistoryPage() {
   async function load() {
     try {
       setLoading(true);
-      const res = await apiFetch<HistoryResponse>('/api/rides/history');
+      const res = await apiFetch<HistoryResponse>('/api/rides/history', { role: 'passenger' });
       setRows(res.data);
       setNextCursor(res.pagination.nextCursor);
     } catch (err) {
       if (isSessionExpired(err)) {
-        clearToken();
+        clearToken('passenger');
         router.push('/login');
         return;
       }
@@ -60,13 +60,14 @@ export default function RideHistoryPage() {
     setLoadingMore(true);
     try {
       const res = await apiFetch<HistoryResponse>(
-        `/api/rides/history?cursor=${encodeURIComponent(nextCursor)}`
+        `/api/rides/history?cursor=${encodeURIComponent(nextCursor)}`,
+        { role: 'passenger' }
       );
       setRows((prev) => [...prev, ...res.data]);
       setNextCursor(res.pagination.nextCursor);
     } catch (err) {
       if (isSessionExpired(err)) {
-        clearToken();
+        clearToken('passenger');
         router.push('/login');
         return;
       }

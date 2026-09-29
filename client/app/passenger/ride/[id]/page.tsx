@@ -33,7 +33,7 @@ interface RideResponse {
 }
 
 export default function PassengerRidePage() {
-  const { isAuthorized } = useRequireAuth();
+  const { isAuthorized } = useRequireAuth('passenger');
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const rideId = params.id;
@@ -42,13 +42,13 @@ export default function PassengerRidePage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const { data, error, loading, refresh } = usePolling<RideResponse>(
-    () => apiFetch<RideResponse>(`/api/rides/${rideId}`),
+    () => apiFetch<RideResponse>(`/api/rides/${rideId}`, { role: 'passenger' }),
     3000
   );
 
   useEffect(() => {
     if (isSessionExpired(error)) {
-      clearToken();
+      clearToken('passenger');
       router.push('/login');
     }
   }, [error, router]);
@@ -69,12 +69,12 @@ export default function PassengerRidePage() {
     setInlineError(null);
     setActionLoading(true);
     try {
-      await apiFetch(`/api/rides/${rideId}/cancel`, { method: 'POST', idempotencyKey: uuid() });
+      await apiFetch(`/api/rides/${rideId}/cancel`, { method: 'POST', idempotencyKey: uuid(), role: 'passenger' });
       pushToast('Ride cancelled. No refund — cash payment.', 'success');
       await refresh();
     } catch (err) {
       if (isSessionExpired(err)) {
-        clearToken();
+        clearToken('passenger');
         router.push('/login');
         return;
       }

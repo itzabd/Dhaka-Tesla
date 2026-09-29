@@ -60,7 +60,7 @@ interface RequestsResponse {
 }
 
 export default function DriverDashboardPage() {
-  const { isAuthorized } = useRequireAuth();
+  const { isAuthorized } = useRequireAuth('driver');
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
@@ -70,10 +70,10 @@ export default function DriverDashboardPage() {
   // Poll both endpoints every 3 s so new requests appear and passenger
   // cancellations disappear without a manual refresh.
   const { data: currentData, error: currentError, loading: currentLoading, refresh: refreshCurrent } =
-    usePolling<CurrentResponse>(() => apiFetch<CurrentResponse>('/api/driver/pools/current'), 3000);
+    usePolling<CurrentResponse>(() => apiFetch<CurrentResponse>('/api/driver/pools/current', { role: 'driver' }), 3000);
 
   const { data: requestsData, error: requestsError, loading: requestsLoading, refresh: refreshRequests } =
-    usePolling<RequestsResponse>(() => apiFetch<RequestsResponse>('/api/driver/requests'), 3000);
+    usePolling<RequestsResponse>(() => apiFetch<RequestsResponse>('/api/driver/requests', { role: 'driver' }), 3000);
 
   const current = currentData;
   const requests = requestsData?.data ?? [];
@@ -84,7 +84,7 @@ export default function DriverDashboardPage() {
     const err = currentError || requestsError;
     if (!err) return;
     if (isSessionExpired(err)) {
-      clearToken();
+      clearToken('driver');
       router.push('/login');
       return;
     }
@@ -107,11 +107,12 @@ export default function DriverDashboardPage() {
       await apiFetch<VehicleInfo>('/api/driver/online', {
         method: 'PATCH',
         body: JSON.stringify({ isOnline: !current.vehicle.isOnline }),
+        role: 'driver',
       });
       await load();
     } catch (err) {
       if (isSessionExpired(err)) {
-        clearToken();
+        clearToken('driver');
         router.push('/login');
         return;
       }
@@ -135,11 +136,12 @@ export default function DriverDashboardPage() {
       await apiFetch(`/api/driver/requests/${requestId}/accept`, {
         method: 'POST',
         idempotencyKey: uuid(),
+        role: 'driver',
       });
       await load();
     } catch (err) {
       if (isSessionExpired(err)) {
-        clearToken();
+        clearToken('driver');
         router.push('/login');
         return;
       }

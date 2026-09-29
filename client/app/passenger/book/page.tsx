@@ -35,7 +35,7 @@ const PRESET_CORRIDORS: Array<{ label: string; pickup: Zone; dropoff: Zone }> = 
 ];
 
 export default function BookRidePage() {
-  const { isAuthorized } = useRequireAuth();
+  const { isAuthorized } = useRequireAuth('passenger');
   const router = useRouter();
   const [pickupZone, setPickupZone] = useState<Zone>('BANANI');
   const [dropoffZone, setDropoffZone] = useState<Zone>('MOHAKHALI');
@@ -49,7 +49,7 @@ export default function BookRidePage() {
   useEffect(() => {
     if (!isAuthorized) return;
     let mounted = true;
-    apiFetch<{ data: ActiveRideSummary[] }>('/api/rides/history?limit=5')
+    apiFetch<{ data: ActiveRideSummary[] }>('/api/rides/history?limit=5', { role: 'passenger' })
       .then((res) => {
         if (!mounted || !res.data) return;
         const current = res.data.find((r) =>
@@ -82,12 +82,13 @@ export default function BookRidePage() {
         method: 'POST',
         idempotencyKey: uuid(),
         body: JSON.stringify({ pickupZone, dropoffZone, requestedSeats }),
+        role: 'passenger',
       });
       setBookedRide(data);
       router.push(`/passenger/ride/${data.id}`);
     } catch (err) {
       if (isSessionExpired(err)) {
-        clearToken();
+        clearToken('passenger');
         router.push('/login');
         return;
       }
