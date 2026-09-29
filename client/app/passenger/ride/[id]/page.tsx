@@ -10,6 +10,7 @@ import { PassengerSidebar } from '@/components/PassengerSidebar';
 import { LoadingState } from '@/components/LoadingState';
 import { ErrorState } from '@/components/ErrorState';
 import { pushToast } from '@/lib/useToast';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface RideResponse {
   id: string;
@@ -38,6 +39,7 @@ export default function PassengerRidePage() {
   const rideId = params.id;
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const { data, error, loading, refresh } = usePolling<RideResponse>(
     () => apiFetch<RideResponse>(`/api/rides/${rideId}`),
@@ -62,8 +64,8 @@ export default function PassengerRidePage() {
     if (current) previousStatusRef.current = current;
   }, [data?.status]);
 
-  async function onCancel() {
-    if (!window.confirm('Cancel this ride? This cannot be undone.')) return;
+  async function doCancel() {
+    setConfirmOpen(false);
     setInlineError(null);
     setActionLoading(true);
     try {
@@ -88,6 +90,19 @@ export default function PassengerRidePage() {
   }
 
   if (!isAuthorized) return <LoadingState label="Checking session…" />;
+
+  const cancelDialog = (
+    <ConfirmDialog
+      open={confirmOpen}
+      title="Cancel this ride?"
+      message="This cannot be undone. No refund will be issued — payment is cash on arrival."
+      confirmLabel="Yes, cancel ride"
+      cancelLabel="Keep ride"
+      variant="danger"
+      onConfirm={doCancel}
+      onCancel={() => setConfirmOpen(false)}
+    />
+  );
 
   // DATA-FIRST RENDERING
   if (data) {
@@ -331,14 +346,17 @@ export default function PassengerRidePage() {
                     </div>
 
                     {canCancel ? (
-                      <button
-                        type="button"
-                        onClick={onCancel}
-                        disabled={actionLoading}
-                        className="px-4 py-2 text-xs font-bold text-white bg-danger hover:bg-danger-dark rounded-lg transition disabled:opacity-50"
-                      >
-                        {actionLoading ? 'Cancelling…' : 'Cancel ride'}
-                      </button>
+                      <>
+                        {cancelDialog}
+                        <button
+                          type="button"
+                          onClick={() => setConfirmOpen(true)}
+                          disabled={actionLoading}
+                          className="px-4 py-2 text-xs font-bold text-white bg-danger hover:bg-danger-dark rounded-lg transition disabled:opacity-50"
+                        >
+                          {actionLoading ? 'Cancelling…' : 'Cancel ride'}
+                        </button>
+                      </>
                     ) : (
                       <button
                         type="button"

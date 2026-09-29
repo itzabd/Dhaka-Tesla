@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch, clearToken, uuid, isSessionExpired } from '@/lib/api';
 import { useRequireAuth } from '@/lib/useRequireAuth';
+import { usePolling } from '@/lib/usePolling';
 import { DriverSidebar } from '@/components/DriverSidebar';
 import { RequestCard } from '@/components/driver/RequestCard';
 import { ActivePoolCard } from '@/components/driver/ActivePoolCard';
@@ -61,57 +62,52 @@ interface RequestsResponse {
 export default function DriverDashboardPage() {
   const { isAuthorized } = useRequireAuth();
   const router = useRouter();
-  const [current, setCurrent] = useState<CurrentResponse | null>(null);
-  const [requests, setRequests] = useState<RequestRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [isToggling, setIsToggling] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    setError(null);
-    setInlineError(null);
-    setToggleError(null);
-    try {
-      const [currentRes, requestsRes] = await Promise.all([
-        apiFetch<CurrentResponse>('/api/driver/pools/current'),
-        apiFetch<RequestsResponse>('/api/driver/requests'),
-      ]);
-      setCurrent(currentRes);
-      setRequests(requestsRes.data || []);
-    } catch (err) {
-      if (isSessionExpired(err)) {
-        clearToken();
-        router.push('/login');
-        return;
-      }
-      if (err instanceof Error && err.message === 'VEHICLE_NOT_FOUND') {
-        setError('Your account has no active vehicle. Contact support.');
-        return;
-      }
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
-    } finally {
-      setLoading(false);
-    }
-  }
+  // Poll both endpoints every 3 s so new requests appear and passenger
+  // cancellations disappear without a manual refresh.
+  const { data: currentData, error: currentError, loading: currentLoading, refresh: refreshCurrent } =
+    usePolling<CurrentResponse>(() => apiFetch<CurrentResponse>('/api/driver/pools/current'), 3000);
 
+  const { data: requestsData, error: requestsError, loading: requestsLoading, refresh: refreshRequests } =
+    usePolling<RequestsResponse>(() => apiFetch<RequestsResponse>('/api/driver/requests'), 3000);
+
+  const current = currentData;
+  const requests = requestsData?.data ?? [];
+  const loading = currentLoading || requestsLoading;
+
+  // Detect session expiry from either poll.
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const err = currentError || requestsError;
+    if (!err) return;
+    if (isSessionExpired(err)) {
+      clearToken();
+      router.push('/login');
+      return;
+    }
+    if (err.message === 'VEHICLE_NOT_FOUND') {
+      setError('Your account has no active vehicle. Contact support.');
+      return;
+    }
+    setError(err.message);
+  }, [currentError, requestsError, router]);
+
+  async function load() {
+    await Promise.all([refreshCurrent(), refreshRequests()]);
+  }
 
   async function handleToggleOnline() {
     if (!current?.vehicle) return;
     setIsToggling(true);
     setToggleError(null);
     try {
-      const res = await apiFetch<VehicleInfo>('/api/driver/online', {
+      await apiFetch<VehicleInfo>('/api/driver/online', {
         method: 'PATCH',
         body: JSON.stringify({ isOnline: !current.vehicle.isOnline }),
       });
-      setCurrent((prev) => (prev ? { ...prev, vehicle: { ...prev.vehicle, isOnline: res.isOnline } } : null));
       await load();
     } catch (err) {
       if (isSessionExpired(err)) {
