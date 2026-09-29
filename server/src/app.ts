@@ -21,6 +21,10 @@ app.use('/api/auth', authRouter);
 app.use('/api/rides', ridesRouter);
 app.use('/api/driver', driverRouter);
 
+app.get('/', (_req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok', service: 'Dhaka Tesla API', version: '1.0.0' });
+});
+
 app.get('/health', async (_req: Request, res: Response) => {
   try {
     await pool.query('SELECT 1');
