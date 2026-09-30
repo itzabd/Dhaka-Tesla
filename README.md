@@ -464,4 +464,4 @@ The demo covers:
 * Passenger and driver history
 * Key validation and edge cases
 Walkthrough of passenger booking, atomic driver pool acceptance, and multi-tab lifecycle:  
-[Dhaka Tesla Pool Demo Video](https://dhaka-tesla-phi.vercel.app)
+▶️ **[Dhaka Tesla Pool Demo Video (YouTube)](https://youtu.be/GIrVWaIG70U)**
